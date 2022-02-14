@@ -35,8 +35,10 @@ int window_height;
 float aspRat;
 
 //CUDA
-int2*   h_noise;
-int2*   d_noise;
+int*   h_noiseX;
+int*   h_noiseY;
+int*   d_noiseX;
+int*   d_noiseY;
 size_t noiseSz;
 
 uchar4* d_img;
@@ -79,18 +81,19 @@ static inline int divUp(int x, int y)
 int main(int argc, char** argv)
 {
 	//Input Parameters
-	N = 16*16;
+	N = 16;
 	W = 640;
 	H = 480;
 
 	window_width  = W;
 	window_height = H;
-	aspRat        = (float)window_width/(float)window_height;
 
 	//Set buffer pointers to NULL
-	h_noise =NULL;
-	d_noise =NULL;
-	noiseSz = N*sizeof(int2);
+	h_noiseX =NULL;
+	h_noiseY =NULL;
+	d_noiseX =NULL;
+	d_noiseY =NULL;
+	noiseSz = N*sizeof(int);
 
 	d_img   =NULL;
 	imgSz   = W*H*sizeof(uchar4);
@@ -145,8 +148,10 @@ int main(int argc, char** argv)
 	sdkCreateTimer(&timer);
 
 	//Allocate Memory
-	checkCudaErrors(cudaMallocHost((void **)&h_noise, noiseSz));
-	checkCudaErrors(cudaMalloc((void **)&d_noise, noiseSz));
+	checkCudaErrors(cudaMallocHost((void **)&h_noiseX, noiseSz));
+	checkCudaErrors(cudaMallocHost((void **)&h_noiseY, noiseSz));
+	checkCudaErrors(cudaMalloc((void **)&d_noiseX, noiseSz));
+	checkCudaErrors(cudaMalloc((void **)&d_noiseY, noiseSz));
 	checkCudaErrors(cudaMalloc((void **)&d_img, imgSz));
 
 	//Set Timers
@@ -158,7 +163,7 @@ int main(int argc, char** argv)
 
 	int seed = (int)time(0);
 
-	generate_uniform2D_kernel<<<blocks, threads>>>(d_noise, seed, W, H, N);
+	generate_uniform2D_kernel<<<blocks, threads>>>(d_noiseX, d_noiseY, seed, W, H, N);
 
 	checkCudaErrors(cudaEventRecord(stop, 0));
 	checkCudaErrors(cudaEventSynchronize(stop));
@@ -172,7 +177,7 @@ int main(int argc, char** argv)
 	//Write Random data onto image buffer
 	checkCudaErrors(cudaEventRecord(start, 0));
 
-	d_writeData2Image<<<blocks, threads>>>(d_img, d_noise, W, H, N);
+	d_writeData2Image<<<blocks, threads>>>(d_img, d_noiseX, d_noiseY, W, H, N);
 
 	checkCudaErrors(cudaEventRecord(stop, 0));
 	checkCudaErrors(cudaEventSynchronize(stop));
@@ -180,12 +185,13 @@ int main(int argc, char** argv)
 	printf("\n\nElapsed time for writing noise data:        %9.6f ms \n", elpsTime);
 
 	//Copy back to host for checking    
-	checkCudaErrors(cudaMemcpy(h_noise, d_noise, noiseSz, cudaMemcpyDeviceToHost));
+	checkCudaErrors(cudaMemcpy(h_noiseX, d_noiseX, noiseSz, cudaMemcpyDeviceToHost));
+	checkCudaErrors(cudaMemcpy(h_noiseY, d_noiseY, noiseSz, cudaMemcpyDeviceToHost));
 
 	printf("Printing out 2D Noise:\n\t");
 	for (int ii = 0; ii < min(100, N); ii++)
 	{
-		printf("[%d, %d], ", h_noise[ii].x, h_noise[ii].y);
+		printf("[%d, %d], ", h_noiseX[ii], h_noiseY[ii]);
 	}
 	printf("\n");
 
@@ -300,7 +306,7 @@ void display()
 
 		int seed = (int)time(0);
 
-		generate_uniform2D_kernel<<<blocks, threads>>>(d_noise, seed, W, H, N);
+		generate_uniform2D_kernel<<<blocks, threads>>>(d_noiseX, d_noiseY, seed, W, H, N);
 
 		checkCudaErrors(cudaEventRecord(stop, 0));
 		checkCudaErrors(cudaEventSynchronize(stop));
@@ -314,7 +320,7 @@ void display()
 		//Write Random data onto image buffer
 		checkCudaErrors(cudaEventRecord(start, 0));
 
-		d_writeData2Image<<<blocks, threads>>>(d_img, d_noise, W, H, N);
+		d_writeData2Image<<<blocks, threads>>>(d_img, d_noiseX, d_noiseY, W, H, N);
 
 		checkCudaErrors(cudaEventRecord(stop, 0));
 		checkCudaErrors(cudaEventSynchronize(stop));
@@ -322,12 +328,13 @@ void display()
 		printf("\n\nElapsed time for writing noise data:        %9.6f ms \n", elpsTime);
 
 		//Copy back to host for checking    
-		checkCudaErrors(cudaMemcpy(h_noise, d_noise, noiseSz, cudaMemcpyDeviceToHost));
+		checkCudaErrors(cudaMemcpy(h_noiseX, d_noiseX, noiseSz, cudaMemcpyDeviceToHost));
+		checkCudaErrors(cudaMemcpy(h_noiseY, d_noiseY, noiseSz, cudaMemcpyDeviceToHost));
 
 		printf("Printing out 2D Noise:\n\t");
 		for (int ii = 0; ii < min(100, N); ii++)
 		{
-			printf("[%d, %d], ", h_noise[ii].x, h_noise[ii].y);
+			printf("[%d, %d], ", h_noiseX[ii], h_noiseY[ii]);
 		}
 		printf("\n");
 
@@ -358,13 +365,13 @@ void display()
 	//Note: texCoords go clockwise from top left and verts go counter-clockwise from lower left
 	glBegin(GL_QUADS);
 	glTexCoord2f(0.0, 1.0);
-	glVertex3f(-aspRat, -1.0, 0.0);
+	glVertex3f(-1, -1.0, 0.0);
 	glTexCoord2f(1.0, 1.0);
-	glVertex3f(aspRat, -1.0, 0.0);
+	glVertex3f(1, -1.0, 0.0);
 	glTexCoord2f(1.0, 0.0);
-	glVertex3f(aspRat, 1.0, 0.0);
+	glVertex3f(1, 1.0, 0.0);
 	glTexCoord2f(0.0, 0.0);
-	glVertex3f(-aspRat, 1.0, 0.0);
+	glVertex3f(-1, 1.0, 0.0);
 	glEnd();
 	glBindTexture(GL_TEXTURE_2D, 0);
 	glDisable(GL_TEXTURE_2D);
@@ -422,8 +429,10 @@ void cleanup()
 	fprintf(stdout,"\t\tAll openGL resources cleaned\n");
 
 	//Deallocate memory
-	checkCudaErrors(cudaFreeHost(h_noise));
-	checkCudaErrors(cudaFree(d_noise));
+	checkCudaErrors(cudaFreeHost(h_noiseX));
+	checkCudaErrors(cudaFreeHost(h_noiseY));
+	checkCudaErrors(cudaFree(d_noiseX));
+	checkCudaErrors(cudaFree(d_noiseY));
 	checkCudaErrors(cudaFree(d_img));
 
 	checkCudaErrors(cudaEventDestroy(start));
