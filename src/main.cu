@@ -35,10 +35,10 @@ int window_height;
 float aspRat;
 
 //CUDA
-int*   h_noiseX;
-int*   h_noiseY;
-int*   d_noiseX;
-int*   d_noiseY;
+float*   h_noiseX;
+float*   h_noiseY;
+float*   d_noiseX;
+float*   d_noiseY;
 size_t noiseSz;
 
 uchar4* d_img;
@@ -89,13 +89,13 @@ int main(int argc, char** argv)
 	window_height = H;
 
 	//Set buffer pointers to NULL
-	h_noiseX =NULL;
-	h_noiseY =NULL;
-	d_noiseX =NULL;
-	d_noiseY =NULL;
-	noiseSz = N*sizeof(int);
+	h_noiseX = NULL;
+	h_noiseY = NULL;
+	d_noiseX = NULL;
+	d_noiseY = NULL;
+	noiseSz =  N*sizeof(float);
 
-	d_img   =NULL;
+	d_img   = NULL;
 	imgSz   = W*H*sizeof(uchar4);
 
 	//Root GPU Launch Optimization
@@ -191,7 +191,7 @@ int main(int argc, char** argv)
 	printf("Printing out 2D Noise:\n\t");
 	for (int ii = 0; ii < min(100, N); ii++)
 	{
-		printf("[%d, %d], ", h_noiseX[ii], h_noiseY[ii]);
+		printf("[%d, %d], ", (int)h_noiseX[ii], (int)h_noiseY[ii]);
 	}
 	printf("\n");
 
@@ -334,7 +334,7 @@ void display()
 		printf("Printing out 2D Noise:\n\t");
 		for (int ii = 0; ii < min(100, N); ii++)
 		{
-			printf("[%d, %d], ", h_noiseX[ii], h_noiseY[ii]);
+			printf("[%d, %d], ", (int)h_noiseX[ii], (int)h_noiseY[ii]);
 		}
 		printf("\n");
 

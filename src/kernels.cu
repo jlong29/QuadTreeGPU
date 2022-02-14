@@ -59,15 +59,15 @@ __global__ void d_setBlackImag(uchar4* dst, const int w, const int h)
 }
 
 //Write Random data onto image buffer
-__global__ void d_writeData2Image(uchar4* dst, const int* __restrict noiseX, const int* __restrict noiseY,const int w, const int h, const int n)
+__global__ void d_writeData2Image(uchar4* dst, const float* __restrict noiseX, const float* __restrict noiseY,const int w, const int h, const int n)
 {
 	int idx        = threadIdx.x + blockIdx.x * blockDim.x;
 	int numThreads = blockDim.x*gridDim.x;
 
 	for(int i = idx; i < n; i+=numThreads)
 	{
-		int shotX = noiseX[i];
-		int shotY = noiseY[i];
+		int shotX = (int)noiseX[i];
+		int shotY = (int)noiseY[i];
 		if (in_img(shotX, shotY, w, h))
 			setGreenHue(255, dst[shotY*w + shotX]);
 	}
@@ -75,7 +75,7 @@ __global__ void d_writeData2Image(uchar4* dst, const int* __restrict noiseX, con
 
 // Random Number Generators //
 // Generate 2D uniform random values
-__global__ void generate_uniform2D_kernel(int* noiseX, int* noiseY, int seed, const int w, const int h, const int n)
+__global__ void generate_uniform2D_kernel(float* noiseX, float* noiseY, int seed, const int w, const int h, const int n)
 {
 	int idx        = threadIdx.x + blockIdx.x * blockDim.x;
 	int numThreads = blockDim.x*gridDim.x;
@@ -89,8 +89,8 @@ __global__ void generate_uniform2D_kernel(int* noiseX, int* noiseY, int seed, co
 	for(int i = idx; i < n; i+=numThreads)
 	{
 		// Generate and store
-		noiseX[i] = (int)((float)w*curand_uniform(&localState));
-		noiseY[i] = (int)((float)h*curand_uniform(&localState));
+		noiseX[i] = (float)w*curand_uniform(&localState);
+		noiseY[i] = (float)h*curand_uniform(&localState);
 	}
 }
 

@@ -14,11 +14,11 @@ typedef unsigned char uchar;
 //Black Image: device and host code
 __global__ void d_setBlackImag(uchar4* dst, const int w, const int h);
 //Write 2D noise data to image buffer
-__global__ void d_writeData2Image(uchar4* dst, const int* __restrict noiseX, const int* __restrict noiseY,const int w, const int h, const int n);
+__global__ void d_writeData2Image(uchar4* dst, const float* __restrict noiseX, const float* __restrict noiseY,const int w, const int h, const int n);
 
 // Random Number Generators //
 // Generate 2D uniform random values
-__global__ void generate_uniform2D_kernel(int* noiseX, int* noiseY, int seed, const int w, const int h, const int n);
+__global__ void generate_uniform2D_kernel(float* noiseX, float* noiseY, int seed, const int w, const int h, const int n);
 
 // Quad Tree Routines //
 __global__ void reset_arrays_kernel(int *mutex, float *x, float *y, float *mass, int *count, int *start, int *sorted, int *child, int *index, float *left, float *right, float *bottom, float *top, int n, int m);
