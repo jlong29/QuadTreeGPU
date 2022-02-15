@@ -61,12 +61,64 @@ void keyboard(unsigned char key, int x, int y);
 void cleanup();
 void timerEvent(int value);
 
+//Help Information
+static void show_usage(std::string name)
+{
+	std::cerr << "Usage: " << name << " <options(s)>"
+			  << "Options:\n"
+			  << "\t-i,--help\tShow this help message\n"
+			  << "\t-n,\t\tset the number of data points to generate\n"
+			  << "\t-w,\t\tset the width of the image plane\n"
+			  << "\t-h,\t\tset the height of the image plane\n"
+			  << std::endl;
+}
+
 int main(int argc, char** argv)
 {
 	//Input Parameters
-	N = 16*4;
+	N = 16;
 	W = 640;
 	H = 480;
+
+	for (int i = 1; i < argc; ++i)
+	{
+		std::string arg = argv[i];
+		if ((arg == "-i") || (arg == "--help"))
+		{
+			show_usage(argv[0]);
+			return 0;  
+		} else if (arg == "-n")
+		{
+			if (i + 1 < argc)
+			{
+				N = (size_t)atoi(argv[++i]);
+			} else
+			{
+				fprintf(stderr, "-n option requires one argument indicating a sample size.\n");
+				return -1;
+			}
+		} else if (arg == "-w")
+		{
+			if (i + 1 < argc)
+			{
+				W = (size_t)atoi(argv[++i]);
+			} else
+			{
+				fprintf(stderr, "-w option requires one argument indicating an image width.\n");
+				return -1;
+			}
+		} else if (arg == "-h")
+		{
+			if (i + 1 < argc)
+			{
+				H = (size_t)atoi(argv[++i]);
+			} else
+			{
+				fprintf(stderr, "-h option requires one argument indicating an image height\n");
+				return -1;
+			}
+		}
+	}
 
 	window_width  = W;
 	window_height = H;
