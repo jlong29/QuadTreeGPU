@@ -64,7 +64,7 @@ void timerEvent(int value);
 int main(int argc, char** argv)
 {
 	//Input Parameters
-	N = 16;
+	N = 16*4;
 	W = 640;
 	H = 480;
 

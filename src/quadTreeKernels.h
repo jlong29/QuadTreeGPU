@@ -20,6 +20,9 @@ namespace quadTreeKernels
 __global__ void d_setBlackImag(uchar4* dst, const int w, const int h);
 //Write 2D noise data to image buffer
 __global__ void d_writeData2Image(uchar4* dst, const float* __restrict noiseX, const float* __restrict noiseY,const int w, const int h, const int n);
+//Draw internal edges of cells
+__global__ void d_drawCellInnerEdges(uchar4* dst, const float* __restrict x, const float* __restrict y, const float* __restrict rx, const float* __restrict ry,
+										const int w, const int h, const int n, const int m);
 
 // Random Number Generators //
 // Generate 2D uniform random values

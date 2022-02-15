@@ -72,6 +72,60 @@ __global__ void d_writeData2Image(uchar4* dst, const float* __restrict noiseX, c
 	}
 }
 
+//Draw internal edges of cells
+__global__ void d_drawCellInnerEdges(uchar4* dst, const float* __restrict x, const float* __restrict y, const float* __restrict rx, const float* __restrict ry,
+										const int w, const int h, const int n, const int m)
+{
+	//Global WarpID
+	int wid    = (threadIdx.x + blockDim.x*blockIdx.x) / WARPSIZE;
+	//Block level WarpID
+	int widB   = threadIdx.x / WARPSIZE;
+	//Lane within warp
+	int lane   = threadIdx.x % WARPSIZE;
+	//Global Warp Stride
+	int stride = blockDim.x*gridDim.x / WARPSIZE;
+
+	//Stores per block, per warp data
+	static __shared__ float4 shared[32];
+
+	// Process cell one warp at a time
+	int offset = 0;
+	while(wid + offset < m-n)
+	{
+		//First lane checks for valid cell
+		if (lane == 0)
+		{
+			if (!isnan(rx[wid]))
+			{
+				shared[widB] = make_float4(x[wid+n], y[wid+n], rx[wid], ry[wid]);	
+			} else
+			{
+				shared[widB] = make_float4(CUDART_NAN_F, CUDART_NAN_F, CUDART_NAN_F, CUDART_NAN_F);	
+			}
+		}
+		__syncthreads();
+
+		//All threads load from shared into registers
+		float4 cell = shared[widB];
+		if (!isnan(cell.x))
+		{
+			//Draw cell
+			int xC = (int)cell.x;
+			int yC = (int)cell.y;
+			int rxC = (int)cell.z;
+			int ryC = (int)cell.w;
+
+			//Horizontal through yC
+			for (int ii=xC-rxC + lane; ii < xC+rxC; ii+=WARPSIZE)
+				setRedHue(255, dst[yC*w + ii]);
+
+			//Vertical Through xC
+			for (int ii=yC-ryC + lane; ii < yC+ryC; ii+=WARPSIZE)
+				setRedHue(255, dst[ii*w + xC]);
+		}
+		offset += stride;
+	}
+}
 // Random Number Generators //
 // Generate 2D uniform random values
 __global__ void generate_uniform2D_kernel(float* noiseX, float* noiseY, int seed, const int w, const int h, const int n)
@@ -394,8 +448,8 @@ __global__ void build_tree_kernel(volatile float *x, volatile float *y, float* r
 						//SET ROOT OF NEW CELL AND LENGTH OF SIDES
 						x[cell]    = 0.5*(l+r);
 						y[cell]    = 0.5*(b+t);
-						rx[cell-n] = 0.5*(l-r);
-						ry[cell-n] = 0.5*(b-t);
+						rx[cell-n] = 0.5*(r-l);
+						ry[cell-n] = 0.5*(t-b);
 
 						// insert new particle
 						node = cell;

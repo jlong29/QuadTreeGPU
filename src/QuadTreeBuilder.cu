@@ -338,6 +338,10 @@ int QuadTreeBuilder::createViz()
 	d_setBlackImag<<<gridDim, blockDim>>>(d_img, width, height);
 	d_writeData2Image<<<blocks, threads>>>(d_img, d_x, d_y, width, height, numData);
 
+	int blocksD = divUp(numNodes - numData, NTHREADS);
+	std::cout << "BlocksD is " << blocksD << std::endl;
+	d_drawCellInnerEdges<<<blocksD, threads>>>(d_img, d_x, d_y, d_rx, d_ry, width, height, numData, numNodes);
+
 	checkCudaErrors(cudaEventRecord(stop, 0));
 	checkCudaErrors(cudaEventSynchronize(stop));
 	checkCudaErrors(cudaEventElapsedTime(&elpsTime, start, stop));
