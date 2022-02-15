@@ -2,15 +2,14 @@
 #include <math_constants.h>
 #include <curand_kernel.h>
 
-#include "kernels.cuh"
+#include "quadTreeKernels.h"
+
+namespace quadTreeKernels
+{
 
 // #define DEBUG
 
 __device__ const int blockSize = 256;
-__device__ const int warp = 32;
-__device__ const int stackSize = 64;
-__device__ const float eps2 = 0.025;
-__device__ const float theta = 0.5;
 
 // Image Processing //
 //Image bounds check
@@ -95,33 +94,30 @@ __global__ void generate_uniform2D_kernel(float* noiseX, float* noiseY, int seed
 }
 
 // Quad Tree Routines //
-__global__ void reset_arrays_kernel(int *mutex, float *x, float *y, float *mass, int *count, int *start, int *sorted, int *child, int *index, float *left, float *right, float *bottom, float *top, int n, int m)
+__global__ void reset_arrays_kernel(int *mutex, float *x, float *y, int *child, int *index, float *left, float *right, float *bottom, float *top, int n, int m)
 {
 	int bodyIndex = threadIdx.x + blockDim.x*blockIdx.x;
 	int stride = blockDim.x*gridDim.x;
 	int offset = 0;
 
 	// reset quadtree arrays
-	while(bodyIndex + offset < m){  
+	while(bodyIndex + offset < m)
+	{  
 #pragma unroll 4
-		for(int i=0;i<4;i++){
+		for(int i=0;i<4;i++)
+		{
 			child[(bodyIndex + offset)*4 + i] = -1;
 		}
-		if(bodyIndex + offset < n){
-			count[bodyIndex + offset] = 1;
-		}
-		else{
+		if(bodyIndex + offset >= n)
+		{
 			x[bodyIndex + offset] = 0;
 			y[bodyIndex + offset] = 0;
-			mass[bodyIndex + offset] = 0;
-			count[bodyIndex + offset] = 0;
 		}
-		start[bodyIndex + offset] = -1;
-		sorted[bodyIndex + offset] = 0;
 		offset += stride;
 	}
 
-	if(bodyIndex == 0){
+	if(bodyIndex == 0)
+	{
 		*mutex = 0;
 		*index = n;
 		*left = CUDART_INF_F;
@@ -130,8 +126,40 @@ __global__ void reset_arrays_kernel(int *mutex, float *x, float *y, float *mass,
 		*top = -CUDART_INF_F;
 	}
 }
+__global__ void reset_arrays_kernel(int *mutex, float *x, float *y, int *child, int *index, float *left, float *right, float *bottom, float *top, const int w, const int h, int n, int m)
+{
+	int bodyIndex = threadIdx.x + blockDim.x*blockIdx.x;
+	int stride = blockDim.x*gridDim.x;
+	int offset = 0;
 
-  
+	// reset quadtree arrays
+	while(bodyIndex + offset < m)
+	{  
+#pragma unroll 4
+		for(int i=0;i<4;i++)
+		{
+			child[(bodyIndex + offset)*4 + i] = -1;
+		}
+		if(bodyIndex + offset >= n)
+		{
+			x[bodyIndex + offset] = 0;
+			y[bodyIndex + offset] = 0;
+		}
+		offset += stride;
+	}
+
+	//Set bounds to image bounds
+	if(bodyIndex == 0)
+	{
+		*mutex = 0;
+		*index = n;
+		*left = 0;
+		*right = w;
+		*bottom = 0;
+		*top = h;
+	}
+}
+ 
 __global__ void compute_bounding_box_kernel(int *mutex, float *x, float *y, volatile float *left, volatile float *right, volatile float *bottom, volatile float *top, int n)
 {
 	int index = threadIdx.x + blockDim.x*blockIdx.x;
@@ -203,8 +231,7 @@ __global__ void compute_bounding_box_kernel(int *mutex, float *x, float *y, vola
 }
 
 
-__global__ void build_tree_kernel(volatile float *x, volatile float *y, volatile float *mass, volatile int *count,
-									int *start, volatile int *child, int *index,
+__global__ void build_tree_kernel(volatile float *x, volatile float *y, volatile int *child, int *index,
 									const float *left, const float *right, const float *bottom, const float *top,
 									const int n, const int m)
 {
@@ -286,13 +313,10 @@ __global__ void build_tree_kernel(volatile float *x, volatile float *y, volatile
 				b = 0.5*(t+b);
 			}
 
+			// TODO: Need to set coordinates of root
 			//Update the Centroid in this cell
-			atomicAdd((float*)&x[node], mass[bodyIndex]*posX);
-			atomicAdd((float*)&y[node], mass[bodyIndex]*posY);
-			//Increment total mass in this cell
-			atomicAdd((float*)&mass[node], mass[bodyIndex]);
-			//Increment body count within this cell
-			atomicAdd((int*)&count[node], 1);
+			// atomicAdd((float*)&x[node], mass[bodyIndex]*posX);
+			// atomicAdd((float*)&y[node], mass[bodyIndex]*posY);
 
 			//Advance to child of this cell
 			childIndex = child[4*node + childPath];
@@ -346,18 +370,8 @@ __global__ void build_tree_kernel(volatile float *x, volatile float *y, volatile
 							}
 						#endif
 
-						//Update the Centroid in this new cell with old particle
-						x[cell] += mass[childIndex]*x[childIndex];
-						y[cell] += mass[childIndex]*y[childIndex];
-						//Increment total mass in this new cell with old particle
-						mass[cell] += mass[childIndex];
-						//Increments body count within this cell with old particle
-						count[cell] += count[childIndex];
-
 						//Assign old particle to subtree leaf
 						child[4*cell + childPath] = childIndex;
-
-						start[cell] = -1;
 
 						// insert new particle
 						node = cell;
@@ -376,13 +390,11 @@ __global__ void build_tree_kernel(volatile float *x, volatile float *y, volatile
 						else{
 							b = 0.5*(t+b);
 						}
+
+						//TODO: set root of new cell
 						//Update the Centroid in this new cell with new particle
-						x[cell] += mass[bodyIndex]*posX;
-						y[cell] += mass[bodyIndex]*posY;
-						//Increment total mass in this new cell with new particle
-						mass[cell] += mass[bodyIndex];
-						//Increments body count within this cell with new particle
-						count[cell] += count[bodyIndex];
+						// x[cell] += mass[bodyIndex]*posX;
+						// y[cell] += mass[bodyIndex]*posY;
 
 						//Set to value of child at this entry, which could be:
 						// -1 == break
@@ -409,3 +421,5 @@ __global__ void build_tree_kernel(volatile float *x, volatile float *y, volatile
 		__syncthreads(); // not needed for correctness
 	}
 }
+
+} // namespace quadTreeKernels

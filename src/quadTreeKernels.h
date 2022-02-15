@@ -1,5 +1,5 @@
-#ifndef __KERNELS_H__
-#define __KERNELS_H__
+#ifndef __QUADTREEKERNELS_H__
+#define __QUADTREEKERNELS_H__
 //CUDA
 #include <cuda_runtime.h>
 
@@ -8,7 +8,12 @@
 #define WARPSIZE 32
 #define NWARPS ((NTHREADS)/(WARPSIZE))
 
+#define NUM_CELLS 4
+
 typedef unsigned char uchar;
+
+namespace quadTreeKernels
+{
 
 // Image Processing //
 //Black Image: device and host code
@@ -21,12 +26,16 @@ __global__ void d_writeData2Image(uchar4* dst, const float* __restrict noiseX, c
 __global__ void generate_uniform2D_kernel(float* noiseX, float* noiseY, int seed, const int w, const int h, const int n);
 
 // Quad Tree Routines //
-__global__ void reset_arrays_kernel(int *mutex, float *x, float *y, float *mass, int *count, int *start, int *sorted, int *child, int *index, float *left, float *right, float *bottom, float *top, int n, int m);
+__global__ void reset_arrays_kernel(int *mutex, float *x, float *y, int *child, int *index, float *left, float *right, float *bottom, float *top, int n, int m);
+__global__ void reset_arrays_kernel(int *mutex, float *x, float *y, int *child, int *index, float *left, float *right, float *bottom, float *top, const int w, const int h, int n, int m);
+
 __global__ void compute_bounding_box_kernel(int *mutex, float *x, float *y, volatile float *left, volatile float *right, volatile float *bottom, volatile float *top, int n);
 
-__global__ void build_tree_kernel(volatile float *x, volatile float *y, volatile float *mass, volatile int *count,
-									int *start, volatile int *child, int *index,
+__global__ void build_tree_kernel(volatile float *x, volatile float *y, volatile int *child, int *index,
 									const float *left, const float *right, const float *bottom, const float *top,
 									const int n, const int m);
 
-#endif
+
+} // namespace quadTreeKernels
+
+#endif	//__QUADTREEKERNELS_H__

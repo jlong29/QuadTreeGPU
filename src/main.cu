@@ -18,10 +18,10 @@
 #include <cuda_gl_interop.h>
 #define REFRESH_DELAY     10 //ms
 
-#include "kernels.cuh"
+#include "QuadTreeBuilder.h"
 
 //Reset Quad Tree state with new data
-static bool bReset      = false;
+static bool bReset = false;
 
 // GLOBAL Variables //
 //Problem Size
@@ -34,18 +34,8 @@ int window_width;
 int window_height;
 float aspRat;
 
-//CUDA
-float*   h_noiseX;
-float*   h_noiseY;
-float*   d_noiseX;
-float*   d_noiseY;
-size_t noiseSz;
-
-uchar4* d_img;
-size_t imgSz;
-
-float elpsTime;
-cudaEvent_t start, stop;
+//The star of the show
+QuadTreeBuilder quadTree;
 
 //OPENGL
 //Texture variables
@@ -71,13 +61,6 @@ void keyboard(unsigned char key, int x, int y);
 void cleanup();
 void timerEvent(int value);
 
-#include "kernels.cuh"
-
-static inline int divUp(int x, int y)
-{
-	return (x + y - 1) / y;
-}
-
 int main(int argc, char** argv)
 {
 	//Input Parameters
@@ -88,28 +71,8 @@ int main(int argc, char** argv)
 	window_width  = W;
 	window_height = H;
 
-	//Set buffer pointers to NULL
-	h_noiseX = NULL;
-	h_noiseY = NULL;
-	d_noiseX = NULL;
-	d_noiseY = NULL;
-	noiseSz =  N*sizeof(float);
-
-	d_img   = NULL;
-	imgSz   = W*H*sizeof(uchar4);
-
-	//Root GPU Launch Optimization
-	//1D
-	int threads = NTHREADS;
-	int blocks  = divUp(N, NTHREADS);
-
-	//2D
-	dim3 blockDim, gridDim;
-	blockDim.x = WARPSIZE;
-	blockDim.y = NWARPS;
-
-	gridDim.x  = divUp(W, blockDim.x);
-	gridDim.y  = divUp(H, blockDim.y);
+	//Set QuadTreeBuilder parameters
+	quadTree.setParameters(N, W, H);
 
 	//initialize timers
 	fpsCount   = 0;
@@ -148,50 +111,37 @@ int main(int argc, char** argv)
 	sdkCreateTimer(&timer);
 
 	//Allocate Memory
-	checkCudaErrors(cudaMallocHost((void **)&h_noiseX, noiseSz));
-	checkCudaErrors(cudaMallocHost((void **)&h_noiseY, noiseSz));
-	checkCudaErrors(cudaMalloc((void **)&d_noiseX, noiseSz));
-	checkCudaErrors(cudaMalloc((void **)&d_noiseY, noiseSz));
-	checkCudaErrors(cudaMalloc((void **)&d_img, imgSz));
+	if (quadTree.allocate() < 0)
+	{
+		cleanup();
+		return -1;
+	}
 
-	//Set Timers
-	checkCudaErrors(cudaEventCreate(&start));
-	checkCudaErrors(cudaEventCreate(&stop));
+	//Set random data
+	if (quadTree.resetData() < 0)
+	{
+		cleanup();
+		return -1;
+	}
 	
-	//Generate Random Data
-	checkCudaErrors(cudaEventRecord(start, 0));
+	//Visualize output
+	if (quadTree.createViz() < 0)
+	{
+		cleanup();
+		return -1;
+	}
 
-	int seed = (int)time(0);
-
-	generate_uniform2D_kernel<<<blocks, threads>>>(d_noiseX, d_noiseY, seed, W, H, N);
-
-	checkCudaErrors(cudaEventRecord(stop, 0));
-	checkCudaErrors(cudaEventSynchronize(stop));
-	checkCudaErrors(cudaEventElapsedTime(&elpsTime, start, stop));
-	printf("\n\nElapsed time for random number generation:  %9.6f ms \n", elpsTime);
-	
-	//Set Image to Black
-	d_setBlackImag<<<gridDim, blockDim>>>(d_img, W, H);
-	// checkCudaErrors(cudaMemset(d_img, 0, sizeof(uchar4)*W*H));
-
-	//Write Random data onto image buffer
-	checkCudaErrors(cudaEventRecord(start, 0));
-
-	d_writeData2Image<<<blocks, threads>>>(d_img, d_noiseX, d_noiseY, W, H, N);
-
-	checkCudaErrors(cudaEventRecord(stop, 0));
-	checkCudaErrors(cudaEventSynchronize(stop));
-	checkCudaErrors(cudaEventElapsedTime(&elpsTime, start, stop));
-	printf("\n\nElapsed time for writing noise data:        %9.6f ms \n", elpsTime);
-
-	//Copy back to host for checking    
-	checkCudaErrors(cudaMemcpy(h_noiseX, d_noiseX, noiseSz, cudaMemcpyDeviceToHost));
-	checkCudaErrors(cudaMemcpy(h_noiseY, d_noiseY, noiseSz, cudaMemcpyDeviceToHost));
+	//Download data
+	if (quadTree.downloadData() < 0)
+	{
+		cleanup();
+		return -1;
+	}
 
 	printf("Printing out 2D Noise:\n\t");
 	for (int ii = 0; ii < min(100, N); ii++)
 	{
-		printf("[%d, %d], ", (int)h_noiseX[ii], (int)h_noiseY[ii]);
+		printf("[%d, %d], ", (int)quadTree.h_x[ii], (int)quadTree.h_y[ii]);
 	}
 	printf("\n");
 
@@ -200,7 +150,7 @@ int main(int argc, char** argv)
 	cudaGraphicsMapResources(1, &pcuImageRes, 0);
 	cudaGraphicsSubResourceGetMappedArray(&ArrIm, pcuImageRes, 0, 0);
 
-	checkCudaErrors(cudaMemcpyToArray(ArrIm, 0, 0, d_img, imgSz, cudaMemcpyDeviceToDevice));
+	checkCudaErrors(cudaMemcpyToArray(ArrIm, 0, 0, quadTree.d_img, quadTree.imgSz, cudaMemcpyDeviceToDevice));
 	cudaGraphicsUnmapResources(1, &pcuImageRes, 0);
 
 	////////////////////////////////
@@ -288,53 +238,31 @@ void display()
 	{
 		bReset = false;
 
-		//Root GPU Launch Optimization
-		//1D
-		int threads = NTHREADS;
-		int blocks  = divUp(N, NTHREADS);
-
-		//2D
-		dim3 blockDim, gridDim;
-		blockDim.x = WARPSIZE;
-		blockDim.y = NWARPS;
-
-		gridDim.x  = divUp(W, blockDim.x);
-		gridDim.y  = divUp(H, blockDim.y);
-
-		//Generate Random Data
-		checkCudaErrors(cudaEventRecord(start, 0));
-
-		int seed = (int)time(0);
-
-		generate_uniform2D_kernel<<<blocks, threads>>>(d_noiseX, d_noiseY, seed, W, H, N);
-
-		checkCudaErrors(cudaEventRecord(stop, 0));
-		checkCudaErrors(cudaEventSynchronize(stop));
-		checkCudaErrors(cudaEventElapsedTime(&elpsTime, start, stop));
-		printf("\n\nElapsed time for random number generation:  %9.6f ms \n", elpsTime);
+		//Set random data
+		if (quadTree.resetData() < 0)
+		{
+			cleanup();
+			return;
+		}
 		
-		//Set Image to Black
-		d_setBlackImag<<<gridDim, blockDim>>>(d_img, W, H);
-		// checkCudaErrors(cudaMemset(d_img, 0, sizeof(uchar4)*W*H));
+		//Visualize output
+		if (quadTree.createViz() < 0)
+		{
+			cleanup();
+			return;
+		}
 
-		//Write Random data onto image buffer
-		checkCudaErrors(cudaEventRecord(start, 0));
-
-		d_writeData2Image<<<blocks, threads>>>(d_img, d_noiseX, d_noiseY, W, H, N);
-
-		checkCudaErrors(cudaEventRecord(stop, 0));
-		checkCudaErrors(cudaEventSynchronize(stop));
-		checkCudaErrors(cudaEventElapsedTime(&elpsTime, start, stop));
-		printf("\n\nElapsed time for writing noise data:        %9.6f ms \n", elpsTime);
-
-		//Copy back to host for checking    
-		checkCudaErrors(cudaMemcpy(h_noiseX, d_noiseX, noiseSz, cudaMemcpyDeviceToHost));
-		checkCudaErrors(cudaMemcpy(h_noiseY, d_noiseY, noiseSz, cudaMemcpyDeviceToHost));
+		//Download data
+		if (quadTree.downloadData() < 0)
+		{
+			cleanup();
+			return;
+		}
 
 		printf("Printing out 2D Noise:\n\t");
 		for (int ii = 0; ii < min(100, N); ii++)
 		{
-			printf("[%d, %d], ", (int)h_noiseX[ii], (int)h_noiseY[ii]);
+			printf("[%d, %d], ", (int)quadTree.h_x[ii], (int)quadTree.h_y[ii]);
 		}
 		printf("\n");
 
@@ -344,7 +272,7 @@ void display()
 		cudaGraphicsSubResourceGetMappedArray(&ArrIm, pcuImageRes, 0, 0);
 
 		//NOTE: DISTORTION MODEL: 3 * d_dstReSz
-		checkCudaErrors(cudaMemcpyToArray(ArrIm, 0, 0, d_img, imgSz, cudaMemcpyDeviceToDevice));
+		checkCudaErrors(cudaMemcpyToArray(ArrIm, 0, 0, quadTree.d_img, quadTree.imgSz, cudaMemcpyDeviceToDevice));
 		cudaGraphicsUnmapResources(1, &pcuImageRes, 0);
 	}
 
@@ -428,14 +356,8 @@ void cleanup()
 	imageTex = 0;
 	fprintf(stdout,"\t\tAll openGL resources cleaned\n");
 
-	//Deallocate memory
-	checkCudaErrors(cudaFreeHost(h_noiseX));
-	checkCudaErrors(cudaFreeHost(h_noiseY));
-	checkCudaErrors(cudaFree(d_noiseX));
-	checkCudaErrors(cudaFree(d_noiseY));
-	checkCudaErrors(cudaFree(d_img));
+	//Deallocate device memory and destory timers
+	quadTree.deallocate();
 
-	checkCudaErrors(cudaEventDestroy(start));
-	checkCudaErrors(cudaEventDestroy(stop));
 	fprintf(stdout,"\t\tAll Cuda resources cleaned\n");
 }

@@ -288,16 +288,20 @@ else
 	@echo "Build is ready - all openGL dependencies have been met"
 endif
 
-# CUDA Kernels
-kernels.o: $(SRC_DIR)/kernels.cu $(SRC_DIR)/kernels.cuh
+# Quad Tree CUDA Kernels
+quadTreeKernels.o: $(SRC_DIR)/quadTreeKernels.cu $(SRC_DIR)/quadTreeKernels.h
 	$(EXEC) $(NVCC) $(INCLUDES) $(ALL_CCFLAGS) $(GENCODE_FLAGS) -c $<
+
+# Quad Tree Builder
+QuadTreeBuilder.o: $(SRC_DIR)/QuadTreeBuilder.cu $(SRC_DIR)/QuadTreeBuilder.h
+	$(EXEC) $(NVCC) $(INCLUDES) $(ALL_CCFLAGS) -std=c++11 $(GENCODE_FLAGS) -c $<
 
 # main application object
 main.o:$(SRC_DIR)/main.cu
 	$(EXEC) $(NVCC) $(INCLUDES) $(ALL_CCFLAGS) -std=c++11 $(GENCODE_FLAGS) -c $<
 
 # main application build
-quadTreeGPU: main.o kernels.o
+quadTreeGPU: main.o QuadTreeBuilder.o quadTreeKernels.o
 	$(EXEC) $(NVCC) $(ALL_LDFLAGS) $(GENCODE_FLAGS) -o $@ $+ $(LIBRARIES)
 	$(EXEC) mv $@ ./bin
 
