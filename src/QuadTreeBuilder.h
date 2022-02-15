@@ -22,13 +22,6 @@ class QuadTreeBuilder
 		int numNodes;
 		int step;
 
-		float* h_left;
-		float* h_right;
-		float* h_bottom;
-		float* h_top;
-
-		int*   h_child;
-
 		float* d_left;
 		float* d_right;
 		float* d_bottom;
@@ -36,6 +29,8 @@ class QuadTreeBuilder
 
 		float* d_x;
 		float* d_y;
+		float* d_rH;	//horizontal cell radius
+		float* d_rV;	//vertical cell radius
 		size_t dataSz;
 		size_t nodeSz;
 
@@ -45,6 +40,7 @@ class QuadTreeBuilder
 		int*   d_mutex;  //used for locking 
 
 		float elpsTime;
+		bool timersCreated;
 		cudaEvent_t start, stop; // used for timing
 
 	public:
@@ -94,7 +90,7 @@ class QuadTreeBuilder
 		//Resets arrays used in constructing the quad tree
 		void ResetArrays(int* mutex, float* x, float* y, int* child, int* index, float* left, float* right, float* bottom, float* top, int n, int m);
 		void ResetArrays(int* mutex, float* x, float* y, int* child, int* index, float* left, float* right, float* bottom, float* top, const int w, const int h, int n, int m);
-		void ComputeBoundingBox(int* mutex, float* x, float* y, float* left, float* right, float* bottom, float* top, int n);
+		void ComputeBoundingBox(int* mutex, int* index, float* x, float* y, float* left, float* right, float* bottom, float* top, int n);
 		void BuildQuadTree(float* x, float* y, int* child, int* index, float* left, float* right, float* bottom, float* top, int n, int m);
 
 		static inline int divUp(int x, int y)

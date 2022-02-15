@@ -94,7 +94,7 @@ __global__ void generate_uniform2D_kernel(float* noiseX, float* noiseY, int seed
 }
 
 // Quad Tree Routines //
-__global__ void reset_arrays_kernel(int *mutex, float *x, float *y, int *child, int *index, float *left, float *right, float *bottom, float *top, int n, int m)
+__global__ void reset_arrays_kernel(int* mutex, float* x, float* y, int* child, int* index, float* left, float* right, float* bottom, float* top, int n, int m)
 {
 	int bodyIndex = threadIdx.x + blockDim.x*blockIdx.x;
 	int stride = blockDim.x*gridDim.x;
@@ -126,7 +126,7 @@ __global__ void reset_arrays_kernel(int *mutex, float *x, float *y, int *child, 
 		*top = -CUDART_INF_F;
 	}
 }
-__global__ void reset_arrays_kernel(int *mutex, float *x, float *y, int *child, int *index, float *left, float *right, float *bottom, float *top, const int w, const int h, int n, int m)
+__global__ void reset_arrays_kernel(int* mutex, float* x, float* y, int* child, int* index, float* left, float* right, float* bottom, float* top, const int w, const int h, int n, int m)
 {
 	int bodyIndex = threadIdx.x + blockDim.x*blockIdx.x;
 	int stride = blockDim.x*gridDim.x;
@@ -142,8 +142,8 @@ __global__ void reset_arrays_kernel(int *mutex, float *x, float *y, int *child, 
 		}
 		if(bodyIndex + offset >= n)
 		{
-			x[bodyIndex + offset] = 0;
-			y[bodyIndex + offset] = 0;
+			x[bodyIndex + offset] = CUDART_NAN_F;
+			y[bodyIndex + offset] = CUDART_NAN_F;
 		}
 		offset += stride;
 	}
@@ -152,22 +152,28 @@ __global__ void reset_arrays_kernel(int *mutex, float *x, float *y, int *child, 
 	if(bodyIndex == 0)
 	{
 		*mutex = 0;
-		*index = n;
-		*left = 0;
-		*right = w;
-		*bottom = 0;
-		*top = h;
+		*index = n+1;	//Set to n + 1 to allow for root
+		*left = 0.0f;
+		*right = (float)w;
+		*bottom = 0.0f;
+		*top = (float)h;
+		//set root coordinates
+		//Create a new cell, starting at index n
+		x[n]  = 0.5f*(float)w;
+		y[n]  = 0.5f*(float)h;
 	}
 }
  
-__global__ void compute_bounding_box_kernel(int *mutex, float *x, float *y, volatile float *left, volatile float *right, volatile float *bottom, volatile float *top, int n)
+__global__ void compute_bounding_box_kernel(int* mutex, int* index, float* x, float* y, volatile float* left, volatile float* right, volatile float* bottom, volatile float* top, int n)
 {
-	int index = threadIdx.x + blockDim.x*blockIdx.x;
+	//TODO: optimize using warps
+
+	int idx = threadIdx.x + blockDim.x*blockIdx.x;
 	int stride = blockDim.x*gridDim.x;
-	float x_min = x[index];
-	float x_max = x[index];
-	float y_min = y[index];
-	float y_max = y[index];
+	float x_min = x[idx];
+	float x_max = x[idx];
+	float y_min = y[idx];
+	float y_max = y[idx];
 	
 	__shared__ float left_cache[blockSize];
 	__shared__ float right_cache[blockSize];
@@ -176,11 +182,11 @@ __global__ void compute_bounding_box_kernel(int *mutex, float *x, float *y, vola
 
 
 	int offset = stride;
-	while(index + offset < n){
-		x_min = fminf(x_min, x[index + offset]);
-		x_max = fmaxf(x_max, x[index + offset]);
-		y_min = fminf(y_min, y[index + offset]);
-		y_max = fmaxf(y_max, y[index + offset]);
+	while(idx + offset < n){
+		x_min = fminf(x_min, x[idx + offset]);
+		x_max = fmaxf(x_max, x[idx + offset]);
+		y_min = fminf(y_min, y[idx + offset]);
+		y_max = fmaxf(y_max, y[idx + offset]);
 		offset += stride;
 	}
 
@@ -220,12 +226,19 @@ __global__ void compute_bounding_box_kernel(int *mutex, float *x, float *y, vola
 	// -If a thread has the lock, the mutex will be 1, and the thread loops (spin lock)
 	// -If a thread does not have the lock, it takes the lock and is done
 
+	//TODO: Optimize using registers
 	if(threadIdx.x == 0){
 		while (atomicCAS(mutex, 0 ,1) != 0); // lock
-		*left = fminf(*left, left_cache[0]);
-		*right = fmaxf(*right, right_cache[0]);
+		*left   = fminf(*left, left_cache[0]);
+		*right  = fmaxf(*right, right_cache[0]);
 		*bottom = fminf(*bottom, bottom_cache[0]);
-		*top = fmaxf(*top, top_cache[0]);
+		*top    = fmaxf(*top, top_cache[0]);
+		//set root coordinates
+		__threadfence();
+		//Create a new cell, starting at idx n
+		int cell = atomicAdd(index,1);
+		x[cell]  = 0.5f*(*left + *right);
+		y[cell]  = 0.5f*(*top + *bottom);
 		atomicExch(mutex, 0); // unlock
 	}
 }
@@ -313,11 +326,6 @@ __global__ void build_tree_kernel(volatile float *x, volatile float *y, volatile
 				b = 0.5*(t+b);
 			}
 
-			// TODO: Need to set coordinates of root
-			//Update the Centroid in this cell
-			// atomicAdd((float*)&x[node], mass[bodyIndex]*posX);
-			// atomicAdd((float*)&y[node], mass[bodyIndex]*posY);
-
 			//Advance to child of this cell
 			childIndex = child[4*node + childPath];
 		}
@@ -373,6 +381,10 @@ __global__ void build_tree_kernel(volatile float *x, volatile float *y, volatile
 						//Assign old particle to subtree leaf
 						child[4*cell + childPath] = childIndex;
 
+						//SET ROOT OF NEW CELL
+						x[cell] = 0.5*(l+r);
+						y[cell] = 0.5*(b+t);
+
 						// insert new particle
 						node = cell;
 						childPath = 0;
@@ -390,11 +402,6 @@ __global__ void build_tree_kernel(volatile float *x, volatile float *y, volatile
 						else{
 							b = 0.5*(t+b);
 						}
-
-						//TODO: set root of new cell
-						//Update the Centroid in this new cell with new particle
-						// x[cell] += mass[bodyIndex]*posX;
-						// y[cell] += mass[bodyIndex]*posY;
 
 						//Set to value of child at this entry, which could be:
 						// -1 == break
