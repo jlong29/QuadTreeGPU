@@ -134,17 +134,17 @@ int QuadTreeBuilder::allocate()
 		checkCudaErrors(cudaMalloc((void**)&d_left, sizeof(float)));
 		checkCudaErrors(cudaMemset(d_left, 0, sizeof(float)));
 	}
-	if (d_left==NULL)
+	if (d_right==NULL)
 	{
 		checkCudaErrors(cudaMalloc((void**)&d_right, sizeof(float)));
 		checkCudaErrors(cudaMemset(d_right, 0, sizeof(float)));
 	}
-	if (d_left==NULL)
+	if (d_bottom==NULL)
 	{
 		checkCudaErrors(cudaMalloc((void**)&d_bottom, sizeof(float)));
 		checkCudaErrors(cudaMemset(d_bottom, 0, sizeof(float)));
 	}
-	if (d_left==NULL)
+	if (d_top==NULL)
 	{
 		checkCudaErrors(cudaMalloc((void**)&d_top, sizeof(float)));
 		checkCudaErrors(cudaMemset(d_top, 0, sizeof(float)));
@@ -307,8 +307,12 @@ void QuadTreeBuilder::build()
 	} else
 	{
 		ResetArrays(d_mutex, d_x, d_y, d_rx, d_ry, d_child, d_index, d_left, d_right, d_bottom, d_top, width, height, numData, numNodes);
+		cudaDeviceSynchronize();
+		getLastCudaError("HERE1");
 	}
 	BuildQuadTree(d_x, d_y, d_rx, d_ry, d_child, d_index, d_left, d_right, d_bottom, d_top, numData, numNodes);
+	cudaDeviceSynchronize();
+	getLastCudaError("HERE2");
 
 	checkCudaErrors(cudaEventRecord(stop,0));
 	checkCudaErrors(cudaEventSynchronize(stop));

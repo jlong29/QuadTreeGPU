@@ -123,7 +123,10 @@ int main(int argc, char** argv)
 		cleanup();
 		return -1;
 	}
-	
+
+	// BUILD QUAD TREE
+	quadTree.build();
+
 	//Visualize output
 	if (quadTree.createViz() < 0)
 	{
@@ -244,7 +247,10 @@ void display()
 			cleanup();
 			return;
 		}
-		
+
+		// BUILD QUAD TREE
+		quadTree.build();
+
 		//Visualize output
 		if (quadTree.createViz() < 0)
 		{
