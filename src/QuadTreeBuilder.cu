@@ -28,6 +28,8 @@ QuadTreeBuilder::QuadTreeBuilder()
 
 	d_x      = NULL;
 	d_y      = NULL;
+	d_rx     = NULL;
+	d_ry     = NULL;
 
 	d_child  = NULL;
 
@@ -78,6 +80,9 @@ QuadTreeBuilder::QuadTreeBuilder(int n, int w, int h):
 
 	checkCudaErrors(cudaMalloc((void**)&d_x, nodeSz));
 	checkCudaErrors(cudaMalloc((void**)&d_y, nodeSz));
+	checkCudaErrors(cudaMalloc((void**)&d_rx, nodeSz-dataSz));	//NOTE; -dataSz
+	checkCudaErrors(cudaMalloc((void**)&d_ry, nodeSz-dataSz));
+	
 	checkCudaErrors(cudaMalloc((void**)&d_child, 4*numNodes*sizeof(int)));
 
 	checkCudaErrors(cudaMalloc((void**)&d_index, sizeof(int)));
@@ -152,6 +157,14 @@ int QuadTreeBuilder::allocate()
 	{
 		checkCudaErrors(cudaMalloc((void**)&d_y, nodeSz));
 	}
+	if (d_rx==NULL)
+	{
+		checkCudaErrors(cudaMalloc((void**)&d_rx, nodeSz-dataSz));	//NOTE: -dataSz
+	}
+	if (d_ry==NULL)
+	{
+		checkCudaErrors(cudaMalloc((void**)&d_ry, nodeSz-dataSz));
+	}
 	if (d_child==NULL)
 	{
 		checkCudaErrors(cudaMalloc((void**)&d_child, 4*numNodes*sizeof(int)));
@@ -213,6 +226,16 @@ void QuadTreeBuilder::deallocate()
 	{
 		checkCudaErrors(cudaFree(d_y));
 		d_y = NULL;
+	}
+	if (d_rx!=NULL)
+	{
+		checkCudaErrors(cudaFree(d_rx));
+		d_rx = NULL;
+	}
+	if (d_ry!=NULL)
+	{
+		checkCudaErrors(cudaFree(d_ry));
+		d_ry = NULL;
 	}
 	if (d_child!=NULL)
 	{
@@ -279,13 +302,13 @@ void QuadTreeBuilder::build()
 
 	if ((width < 0) || (height < 0))
 	{
-		ResetArrays(d_mutex, d_x, d_y, d_child, d_index, d_left, d_right, d_bottom, d_top, numData, numNodes);
-		ComputeBoundingBox(d_mutex, d_index, d_x, d_y, d_left, d_right, d_bottom, d_top, numData);
+		ResetArrays(d_mutex, d_x, d_y, d_rx, d_ry, d_child, d_index, d_left, d_right, d_bottom, d_top, numData, numNodes);
+		ComputeBoundingBox(d_mutex, d_index, d_x, d_y, d_rx, d_ry, d_left, d_right, d_bottom, d_top, numData);
 	} else
 	{
-		ResetArrays(d_mutex, d_x, d_y, d_child, d_index, d_left, d_right, d_bottom, d_top, width, height, numData, numNodes);
+		ResetArrays(d_mutex, d_x, d_y, d_rx, d_ry, d_child, d_index, d_left, d_right, d_bottom, d_top, width, height, numData, numNodes);
 	}
-	BuildQuadTree(d_x, d_y, d_child, d_index, d_left, d_right, d_bottom, d_top, numData, numNodes);
+	BuildQuadTree(d_x, d_y, d_rx, d_ry, d_child, d_index, d_left, d_right, d_bottom, d_top, numData, numNodes);
 
 	checkCudaErrors(cudaEventRecord(stop,0));
 	checkCudaErrors(cudaEventSynchronize(stop));
@@ -357,23 +380,23 @@ int QuadTreeBuilder::resetData()
 }
 
 //Resets arrays used in constructing the quad tree
-void QuadTreeBuilder::ResetArrays(int* mutex, float* x, float* y, int* child, int* index, float* left, float* right, float* bottom, float* top, int n, int m)
+void QuadTreeBuilder::ResetArrays(int* mutex, float* x, float* y, float* rx, float* ry, int* child, int* index, float* left, float* right, float* bottom, float* top, int n, int m)
 {
-	reset_arrays_kernel<<<gridSize, blockSize>>>(mutex, x, y, child, index, left, right, bottom, top, n, m);
+	reset_arrays_kernel<<<gridSize, blockSize>>>(mutex, x, y, rx, ry, child, index, left, right, bottom, top, n, m);
 }
-void QuadTreeBuilder::ResetArrays(int* mutex, float* x, float* y, int* child, int* index, float* left, float* right, float* bottom, float* top, const int w, const int h, int n, int m)
+void QuadTreeBuilder::ResetArrays(int* mutex, float* x, float* y, float* rx, float* ry, int* child, int* index, float* left, float* right, float* bottom, float* top, const int w, const int h, int n, int m)
 {
-	reset_arrays_kernel<<<gridSize, blockSize>>>(mutex, x, y, child, index, left, right, bottom, top, w, h, n, m);	
+	reset_arrays_kernel<<<gridSize, blockSize>>>(mutex, x, y, rx, ry, child, index, left, right, bottom, top, w, h, n, m);	
 }
 
 //Computes a bounding box around user input data
-void QuadTreeBuilder::ComputeBoundingBox(int* mutex, int* index, float* x, float* y, float* left, float* right, float* bottom, float* top, int n)
+void QuadTreeBuilder::ComputeBoundingBox(int* mutex, int* index, float* x, float* y, float* rx, float* ry, float* left, float* right, float* bottom, float* top, int n)
 {
-	compute_bounding_box_kernel<<<gridSize, blockSize>>>(mutex, index, x, y, left, right, bottom, top, n);
+	compute_bounding_box_kernel<<<gridSize, blockSize>>>(mutex, index, x, y, rx, ry, left, right, bottom, top, n);
 }
 
 //Builds a quad tree
-void QuadTreeBuilder::BuildQuadTree(float* x, float* y, int* child, int* index, float* left, float* right, float* bottom, float* top, int n, int m)
+void QuadTreeBuilder::BuildQuadTree(float* x, float* y, float* rx, float* ry, int* child, int* index, float* left, float* right, float* bottom, float* top, int n, int m)
 {
-	build_tree_kernel<<<gridSize, blockSize>>>(x, y, child, index, left, right, bottom, top, n, m);
+	build_tree_kernel<<<gridSize, blockSize>>>(x, y, rx, ry, child, index, left, right, bottom, top, n, m);
 }

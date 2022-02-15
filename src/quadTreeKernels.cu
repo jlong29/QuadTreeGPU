@@ -94,39 +94,7 @@ __global__ void generate_uniform2D_kernel(float* noiseX, float* noiseY, int seed
 }
 
 // Quad Tree Routines //
-__global__ void reset_arrays_kernel(int* mutex, float* x, float* y, int* child, int* index, float* left, float* right, float* bottom, float* top, int n, int m)
-{
-	int bodyIndex = threadIdx.x + blockDim.x*blockIdx.x;
-	int stride = blockDim.x*gridDim.x;
-	int offset = 0;
-
-	// reset quadtree arrays
-	while(bodyIndex + offset < m)
-	{  
-#pragma unroll 4
-		for(int i=0;i<4;i++)
-		{
-			child[(bodyIndex + offset)*4 + i] = -1;
-		}
-		if(bodyIndex + offset >= n)
-		{
-			x[bodyIndex + offset] = 0;
-			y[bodyIndex + offset] = 0;
-		}
-		offset += stride;
-	}
-
-	if(bodyIndex == 0)
-	{
-		*mutex = 0;
-		*index = n;
-		*left = CUDART_INF_F;
-		*right = -CUDART_INF_F;
-		*bottom = CUDART_INF_F;
-		*top = -CUDART_INF_F;
-	}
-}
-__global__ void reset_arrays_kernel(int* mutex, float* x, float* y, int* child, int* index, float* left, float* right, float* bottom, float* top, const int w, const int h, int n, int m)
+__global__ void reset_arrays_kernel(int* mutex, float* x, float* y, float* rx, float* ry, int* child, int* index, float* left, float* right, float* bottom, float* top, int n, int m)
 {
 	int bodyIndex = threadIdx.x + blockDim.x*blockIdx.x;
 	int stride = blockDim.x*gridDim.x;
@@ -144,9 +112,47 @@ __global__ void reset_arrays_kernel(int* mutex, float* x, float* y, int* child, 
 		{
 			x[bodyIndex + offset] = CUDART_NAN_F;
 			y[bodyIndex + offset] = CUDART_NAN_F;
+			rx[bodyIndex + offset - n] = CUDART_NAN_F;
+			ry[bodyIndex + offset - n] = CUDART_NAN_F;
 		}
 		offset += stride;
 	}
+
+	if(bodyIndex == 0)
+	{
+		*mutex = 0;
+		*index = n;
+		*left = CUDART_INF_F;
+		*right = -CUDART_INF_F;
+		*bottom = CUDART_INF_F;
+		*top = -CUDART_INF_F;
+	}
+}
+__global__ void reset_arrays_kernel(int* mutex, float* x, float* y, float* rx, float* ry, int* child, int* index, float* left, float* right, float* bottom, float* top, const int w, const int h, int n, int m)
+{
+	int bodyIndex = threadIdx.x + blockDim.x*blockIdx.x;
+	int stride = blockDim.x*gridDim.x;
+	int offset = 0;
+
+	// reset quadtree arrays
+	while(bodyIndex + offset < m)
+	{  
+#pragma unroll 4
+		for(int i=0;i<4;i++)
+		{
+			child[(bodyIndex + offset)*4 + i] = -1;
+		}
+		if(bodyIndex + offset >= n)
+		{
+			x[bodyIndex + offset] = CUDART_NAN_F;
+			y[bodyIndex + offset] = CUDART_NAN_F;
+			rx[bodyIndex + offset - n] = CUDART_NAN_F;
+			ry[bodyIndex + offset - n] = CUDART_NAN_F;
+		}
+		offset += stride;
+	}
+
+	__threadfence();
 
 	//Set bounds to image bounds
 	if(bodyIndex == 0)
@@ -161,10 +167,12 @@ __global__ void reset_arrays_kernel(int* mutex, float* x, float* y, int* child, 
 		//Create a new cell, starting at index n
 		x[n]  = 0.5f*(float)w;
 		y[n]  = 0.5f*(float)h;
+		rx[0] = 0.5f*(float)w;
+		ry[0] = 0.5f*(float)h;
 	}
 }
  
-__global__ void compute_bounding_box_kernel(int* mutex, int* index, float* x, float* y, volatile float* left, volatile float* right, volatile float* bottom, volatile float* top, int n)
+__global__ void compute_bounding_box_kernel(int* mutex, int* index, float* x, float* y, float* rx, float* ry, volatile float* left, volatile float* right, volatile float* bottom, volatile float* top, int n)
 {
 	//TODO: optimize using warps
 
@@ -236,15 +244,17 @@ __global__ void compute_bounding_box_kernel(int* mutex, int* index, float* x, fl
 		//set root coordinates
 		__threadfence();
 		//Create a new cell, starting at idx n
-		int cell = atomicAdd(index,1);
-		x[cell]  = 0.5f*(*left + *right);
-		y[cell]  = 0.5f*(*top + *bottom);
+		int cell   = atomicAdd(index,1);
+		x[cell]    = 0.5f*(*left + *right);
+		y[cell]    = 0.5f*(*top + *bottom);
+		rx[cell-n] = 0.5f*(*left - *right);
+		ry[cell-n] = 0.5f*(*top - *bottom);
 		atomicExch(mutex, 0); // unlock
 	}
 }
 
 
-__global__ void build_tree_kernel(volatile float *x, volatile float *y, volatile int *child, int *index,
+__global__ void build_tree_kernel(volatile float *x, volatile float *y, float* rx, float* ry, volatile int *child, int *index,
 									const float *left, const float *right, const float *bottom, const float *top,
 									const int n, const int m)
 {
@@ -381,9 +391,11 @@ __global__ void build_tree_kernel(volatile float *x, volatile float *y, volatile
 						//Assign old particle to subtree leaf
 						child[4*cell + childPath] = childIndex;
 
-						//SET ROOT OF NEW CELL
-						x[cell] = 0.5*(l+r);
-						y[cell] = 0.5*(b+t);
+						//SET ROOT OF NEW CELL AND LENGTH OF SIDES
+						x[cell]    = 0.5*(l+r);
+						y[cell]    = 0.5*(b+t);
+						rx[cell-n] = 0.5*(l-r);
+						ry[cell-n] = 0.5*(b-t);
 
 						// insert new particle
 						node = cell;
