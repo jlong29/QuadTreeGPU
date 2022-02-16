@@ -77,10 +77,6 @@ class QuadTreeBuilder
 	private:
 		//Root GPU Launch Optimization
 		//1D
-		//Optimized for building quad tree
-		const dim3 gridSize  = 512;
-		const dim3 blockSize = 256;
-		//For setting random data
 		int threads;
 		int blocks;
 

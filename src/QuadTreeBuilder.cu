@@ -329,7 +329,6 @@ int QuadTreeBuilder::createViz()
 		return -1;
 	}
 
-
 	//Write Random data onto image buffer
 	checkCudaErrors(cudaEventRecord(start, 0));
 
@@ -337,7 +336,7 @@ int QuadTreeBuilder::createViz()
 
 	int blocksD = divUp(numNodes - numData, threads);
 	std::cout << "BlocksD is " << blocksD << std::endl;
-	d_drawCellInnerEdges<<<blocksD, threads>>>(d_img, d_x, d_y, d_rx, d_ry, width, height, numData, numNodes);
+	d_drawCellInnerEdges<<<blocksD, threads>>>(d_img, d_index, d_x, d_y, d_rx, d_ry, width, height, numData, numNodes);
 
 	//Write point last to avoid occulsion by lines (no alpha blending)
 	d_writeData2Image<<<blocks, threads>>>(d_img, d_x, d_y, width, height, numData);
@@ -391,21 +390,21 @@ int QuadTreeBuilder::resetData()
 //Resets arrays used in constructing the quad tree
 void QuadTreeBuilder::ResetArrays()
 {
-	reset_arrays_kernel<<<gridSize, blockSize>>>(d_mutex, d_x, d_y, d_rx, d_ry, d_child, d_index, d_left, d_right, d_bottom, d_top, numData, numNodes);
+	reset_arrays_kernel<<<blocks, threads>>>(d_mutex, d_x, d_y, d_rx, d_ry, d_child, d_index, d_left, d_right, d_bottom, d_top, numData, numNodes);
 }
 void QuadTreeBuilder::ResetArrays(const int w, const int h)
 {
-	reset_arrays_kernel<<<gridSize, blockSize>>>(d_mutex, d_x, d_y, d_rx, d_ry, d_child, d_index, d_left, d_right, d_bottom, d_top, w, h, numData, numNodes);
+	reset_arrays_kernel<<<blocks, threads>>>(d_mutex, d_x, d_y, d_rx, d_ry, d_child, d_index, d_left, d_right, d_bottom, d_top, w, h, numData, numNodes);
 }
 
 //Computes a bounding box around user input data
 void QuadTreeBuilder::ComputeBoundingBox()
 {
-	compute_bounding_box_kernel<<<gridSize, blockSize>>>(d_mutex, d_index, d_x, d_y, d_rx, d_ry, d_left, d_right, d_bottom, d_top, numData);
+	compute_bounding_box_kernel<<<blocks, threads>>>(d_mutex, d_index, d_x, d_y, d_rx, d_ry, d_left, d_right, d_bottom, d_top, numData);
 }
 
 //Builds a quad tree
 void QuadTreeBuilder::BuildQuadTree()
 {
-	build_tree_kernel<<<gridSize, blockSize>>>(d_x, d_y, d_rx, d_ry, d_child, d_index, d_left, d_right, d_bottom, d_top, numData, numNodes);
+	build_tree_kernel<<<1, threads>>>(d_x, d_y, d_rx, d_ry, d_child, d_index, d_left, d_right, d_bottom, d_top, numData, numNodes);
 }
