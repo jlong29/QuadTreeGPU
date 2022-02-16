@@ -90,7 +90,7 @@ __global__ void d_drawCellInnerEdges(uchar4* dst, const float* __restrict x, con
 
 	// Process cell one warp at a time
 	int offset = 0;
-	while(wid + offset < m-n)
+	while(wid + offset < (m-n))
 	{
 		//First lane checks for valid cell
 		if (lane == 0)
@@ -110,16 +110,16 @@ __global__ void d_drawCellInnerEdges(uchar4* dst, const float* __restrict x, con
 		if (!isnan(cell.x))
 		{
 			//Draw cell
-			int xC = (int)cell.x;
-			int yC = (int)cell.y;
+			int xC  = (int)cell.x;
+			int yC  = (int)cell.y;
 			int rxC = (int)cell.z;
 			int ryC = (int)cell.w;
 
-			//Horizontal through yC
+			//Horizontal Edge through yC
 			for (int ii=xC-rxC + lane; ii < xC+rxC; ii+=WARPSIZE)
 				setRedHue(255, dst[yC*w + ii]);
 
-			//Vertical Through xC
+			//Vertical Edge Through xC
 			for (int ii=yC-ryC + lane; ii < yC+ryC; ii+=WARPSIZE)
 				setRedHue(255, dst[ii*w + xC]);
 		}
@@ -150,29 +150,29 @@ __global__ void generate_uniform2D_kernel(float* noiseX, float* noiseY, int seed
 // Quad Tree Routines //
 __global__ void reset_arrays_kernel(int* mutex, float* x, float* y, float* rx, float* ry, int* child, int* index, float* left, float* right, float* bottom, float* top, int n, int m)
 {
-	int bodyIndex = threadIdx.x + blockDim.x*blockIdx.x;
+	int idx = threadIdx.x + blockDim.x*blockIdx.x;
 	int stride = blockDim.x*gridDim.x;
 	int offset = 0;
 
 	// reset quadtree arrays
-	while(bodyIndex + offset < m)
+	while(idx + offset < m)
 	{  
 #pragma unroll 4
 		for(int i=0;i<4;i++)
 		{
-			child[(bodyIndex + offset)*4 + i] = -1;
+			child[(idx + offset)*4 + i] = -1;
 		}
-		if(bodyIndex + offset >= n)
+		if(idx + offset >= n)
 		{
-			x[bodyIndex + offset] = CUDART_NAN_F;
-			y[bodyIndex + offset] = CUDART_NAN_F;
-			rx[bodyIndex + offset - n] = CUDART_NAN_F;
-			ry[bodyIndex + offset - n] = CUDART_NAN_F;
+			x[idx + offset] = CUDART_NAN_F;
+			y[idx + offset] = CUDART_NAN_F;
+			rx[idx + offset - n] = CUDART_NAN_F;
+			ry[idx + offset - n] = CUDART_NAN_F;
 		}
 		offset += stride;
 	}
 
-	if(bodyIndex == 0)
+	if(idx == 0)
 	{
 		*mutex = 0;
 		*index = n;
@@ -184,24 +184,24 @@ __global__ void reset_arrays_kernel(int* mutex, float* x, float* y, float* rx, f
 }
 __global__ void reset_arrays_kernel(int* mutex, float* x, float* y, float* rx, float* ry, int* child, int* index, float* left, float* right, float* bottom, float* top, const int w, const int h, int n, int m)
 {
-	int bodyIndex = threadIdx.x + blockDim.x*blockIdx.x;
+	int idx = threadIdx.x + blockDim.x*blockIdx.x;
 	int stride = blockDim.x*gridDim.x;
 	int offset = 0;
 
 	// reset quadtree arrays
-	while(bodyIndex + offset < m)
+	while(idx + offset < m)
 	{  
 #pragma unroll 4
 		for(int i=0;i<4;i++)
 		{
-			child[(bodyIndex + offset)*4 + i] = -1;
+			child[(idx + offset)*4 + i] = -1;
 		}
-		if(bodyIndex + offset >= n)
+		if(idx + offset >= n)
 		{
-			x[bodyIndex + offset] = CUDART_NAN_F;
-			y[bodyIndex + offset] = CUDART_NAN_F;
-			rx[bodyIndex + offset - n] = CUDART_NAN_F;
-			ry[bodyIndex + offset - n] = CUDART_NAN_F;
+			x[idx + offset] = CUDART_NAN_F;
+			y[idx + offset] = CUDART_NAN_F;
+			rx[idx + offset - n] = CUDART_NAN_F;
+			ry[idx + offset - n] = CUDART_NAN_F;
 		}
 		offset += stride;
 	}
@@ -209,7 +209,7 @@ __global__ void reset_arrays_kernel(int* mutex, float* x, float* y, float* rx, f
 	__threadfence();
 
 	//Set bounds to image bounds
-	if(bodyIndex == 0)
+	if(idx == 0)
 	{
 		*mutex = 0;
 		*index = n+1;	//Set to n + 1 to allow for root
@@ -230,8 +230,8 @@ __global__ void compute_bounding_box_kernel(int* mutex, int* index, float* x, fl
 {
 	//TODO: optimize using warps
 
-	int idx = threadIdx.x + blockDim.x*blockIdx.x;
-	int stride = blockDim.x*gridDim.x;
+	int idx     = threadIdx.x + blockDim.x*blockIdx.x;
+	int stride  = blockDim.x*gridDim.x;
 	float x_min = x[idx];
 	float x_max = x[idx];
 	float y_min = y[idx];
@@ -319,8 +319,8 @@ __global__ void build_tree_kernel(volatile float *x, volatile float *y, float* r
 	m:		the number of possible nodes
 	*/
 
-	int bodyIndex = threadIdx.x + blockIdx.x*blockDim.x;
-	int stride    = blockDim.x*gridDim.x;
+	int idx    = threadIdx.x + blockIdx.x*blockDim.x;
+	int stride = blockDim.x*gridDim.x;
 
 	// build quadtree
 	float l; 
@@ -332,7 +332,7 @@ __global__ void build_tree_kernel(volatile float *x, volatile float *y, float* r
 
 	bool newBody  = true;
 	float posX, posY;
-	while((bodyIndex) < n){
+	while((idx) < n){
 
 		if(newBody){
 			newBody = false;
@@ -344,8 +344,8 @@ __global__ void build_tree_kernel(volatile float *x, volatile float *y, float* r
 
 			node      = 0;
 			childPath = 0;
-			posX      = x[bodyIndex];
-			posY      = y[bodyIndex];
+			posX      = x[idx];
+			posY      = y[idx];
 
 			//Check body location within the top 4 nodes
 			if(posX < 0.5*(l+r)){
@@ -404,7 +404,7 @@ __global__ void build_tree_kernel(volatile float *x, volatile float *y, float* r
 				//If unallocated, insert body and unlock
 				if(childIndex == -1){
 					// Insert body and release lock
-					child[locked] = bodyIndex;
+					child[locked] = idx;
 				}
 				else{
 					//Sets max on number of cells
@@ -475,7 +475,7 @@ __global__ void build_tree_kernel(volatile float *x, volatile float *y, float* r
 					}
 
 					//This means childIndex is set to -1, unallocated, so allocated as body Index
-					child[4*node + childPath] = bodyIndex;
+					child[4*node + childPath] = idx;
 
 					__threadfence();  // Ensures all writes to global memory are complete before lock is released
 
@@ -484,7 +484,7 @@ __global__ void build_tree_kernel(volatile float *x, volatile float *y, float* r
 				}	// if(childIndex == -1): first assignment to body or not
 
 				//Advance to next body
-				bodyIndex += stride;
+				idx += stride;
 				newBody    = true;
 			}	//if(atomicCAS((int*)&child[locked], childIndex, -2) == childIndex)
 
@@ -493,6 +493,9 @@ __global__ void build_tree_kernel(volatile float *x, volatile float *y, float* r
 		// Wait for threads in block to release locks to reduce memory pressure
 		__syncthreads(); // not needed for correctness
 	}
+	if ( threadIdx.x + blockIdx.x*blockDim.x == 0)
+		printf("\tBUILD: Index is %d, so %d cells were created\n", *index, *index-n);
+
 }
 
 } // namespace quadTreeKernels

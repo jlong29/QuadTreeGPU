@@ -88,10 +88,10 @@ class QuadTreeBuilder
 		dim3 blockDim, gridDim;
 
 		//Resets arrays used in constructing the quad tree
-		void ResetArrays(int* mutex, float* x, float* y, float* rx, float* ry, int* child, int* index, float* left, float* right, float* bottom, float* top, int n, int m);
-		void ResetArrays(int* mutex, float* x, float* y, float* rx, float* ry, int* child, int* index, float* left, float* right, float* bottom, float* top, const int w, const int h, int n, int m);
-		void ComputeBoundingBox(int* mutex, int* index, float* x, float* y, float* rx, float* ry, float* left, float* right, float* bottom, float* top, int n);
-		void BuildQuadTree(float* x, float* y, float* rx, float* ry, int* child, int* index, float* left, float* right, float* bottom, float* top, int n, int m);
+		void ResetArrays();
+		void ResetArrays(const int w, const int h);
+		void ComputeBoundingBox();
+		void BuildQuadTree();
 
 		static inline int divUp(int x, int y)
 		{
