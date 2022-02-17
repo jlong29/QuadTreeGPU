@@ -406,5 +406,5 @@ void QuadTreeBuilder::ComputeBoundingBox()
 //Builds a quad tree
 void QuadTreeBuilder::BuildQuadTree()
 {
-	build_tree_kernel<<<1, threads>>>(d_x, d_y, d_rx, d_ry, d_child, d_index, d_left, d_right, d_bottom, d_top, numData, numNodes);
+	build_tree_kernel<<<blocks, threads>>>(d_x, d_y, d_rx, d_ry, d_child, d_index, d_left, d_right, d_bottom, d_top, numData, numNodes);
 }
