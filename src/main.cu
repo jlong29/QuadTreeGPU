@@ -180,7 +180,7 @@ int main(int argc, char** argv)
 	quadTree.build();
 
 	//Visualize output
-	if (quadTree.createViz() < 0)
+	if (quadTree.createBuildViz() < 0)
 	{
 		cleanup();
 		return -1;
@@ -301,10 +301,14 @@ void display()
 		}
 
 		// BUILD QUAD TREE
-		quadTree.build();
+		if (quadTree.build() < 0)
+		{
+			cleanup();
+			return;
+		}
 
 		//Visualize output
-		if (quadTree.createViz() < 0)
+		if (quadTree.createBuildViz() < 0)
 		{
 			cleanup();
 			return;

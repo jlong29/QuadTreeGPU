@@ -19,8 +19,6 @@ QuadTreeBuilder::QuadTreeBuilder()
 	height   = -1;
 	numData  = -1;
 
-	step     = 0;
-
 	d_left   = NULL;
 	d_right  = NULL;
 	d_bottom = NULL;
@@ -28,6 +26,7 @@ QuadTreeBuilder::QuadTreeBuilder()
 
 	d_x      = NULL;
 	d_y      = NULL;
+	d_score  = NULL;
 	d_rx     = NULL;
 	d_ry     = NULL;
 
@@ -48,7 +47,6 @@ QuadTreeBuilder::QuadTreeBuilder(int n, int w, int h):
 	width(w),
 	height(h)
 {
-	step     = 0;
 	numNodes = 2*n+12000;	// A magic large function of n
 
 	// allocate host data
@@ -157,6 +155,10 @@ int QuadTreeBuilder::allocate()
 	{
 		checkCudaErrors(cudaMalloc((void**)&d_y, nodeSz));
 	}
+	if (d_score==NULL)
+	{
+		checkCudaErrors(cudaMalloc((void**)&d_score, nodeSz));
+	}
 	if (d_rx==NULL)
 	{
 		checkCudaErrors(cudaMalloc((void**)&d_rx, nodeSz-dataSz));	//NOTE: -dataSz
@@ -227,6 +229,11 @@ void QuadTreeBuilder::deallocate()
 		checkCudaErrors(cudaFree(d_y));
 		d_y = NULL;
 	}
+	if (d_score!=NULL)
+	{
+		checkCudaErrors(cudaFree(d_score));
+		d_score = NULL;
+	}
 	if (d_rx!=NULL)
 	{
 		checkCudaErrors(cudaFree(d_rx));
@@ -294,10 +301,22 @@ void QuadTreeBuilder::setData(const float* x, const float* y)
 	checkCudaErrors(cudaMemcpy(d_x, x, dataSz, cudaMemcpyDeviceToDevice));
 	checkCudaErrors(cudaMemcpy(d_y, y, dataSz, cudaMemcpyDeviceToDevice));
 }
+void QuadTreeBuilder::setData(const float* x, const float* y, const float* score, const int d)
+{
+	checkCudaErrors(cudaMemcpy(d_x, x, d*sizeof(float), cudaMemcpyDeviceToDevice));
+	checkCudaErrors(cudaMemcpy(d_y, y, d*sizeof(float), cudaMemcpyDeviceToDevice));
+	checkCudaErrors(cudaMemcpy(d_score, score, d*sizeof(float), cudaMemcpyDeviceToDevice));
+}
 
 //build the quad tree
-void QuadTreeBuilder::build()
+int QuadTreeBuilder::build()
 {
+	if (numData < 0)
+	{
+		fprintf(stderr, "QuadTreeBuilder::build(): numData < 0, must initialize prior to building\n");
+		return -1;
+	}
+
 	checkCudaErrors(cudaEventRecord(start,0));
 
 	if ((width < 0) || (height < 0))
@@ -316,16 +335,51 @@ void QuadTreeBuilder::build()
 	checkCudaErrors(cudaEventSynchronize(stop));
 	checkCudaErrors(cudaEventElapsedTime(&elpsTime, start, stop));
 	printf("\n\nElapsed time for QuadTree Build:  %9.6f ms \n", elpsTime);
+}
 
-	step++;
+//filter the data from d > f points to f points according to highest score
+int QuadTreeBuilder::filter(const int d, const int f)
+{
+	if (numData < 0)
+	{
+		fprintf(stderr, "QuadTreeBuilder::filter(): numData < 0, must initialize prior to filtering\n");
+		return -1;
+	}
+	if (d > numData)
+	{
+		fprintf(stderr, "QuadTreeBuilder::filter(): d must be <= numData\n");
+	}
+	if (f > d)
+	{
+		fprintf(stderr, "QuadTreeBuilder::filter(): f must be <= d\n");
+	}
+
+	checkCudaErrors(cudaEventRecord(start,0));
+
+	if ((width < 0) || (height < 0))
+	{
+		ResetArrays();
+		ComputeBoundingBox();
+	} else
+	{
+		ResetArrays(width, height);
+	}
+	FilterQuadTree(d, f);
+	cudaDeviceSynchronize();
+	getLastCudaError("FilterQuadTree");
+
+	checkCudaErrors(cudaEventRecord(stop,0));
+	checkCudaErrors(cudaEventSynchronize(stop));
+	checkCudaErrors(cudaEventElapsedTime(&elpsTime, start, stop));
+	printf("\n\nElapsed time for QuadTree Filter:  %9.6f ms \n", elpsTime);
 }
 
 //Write visualization
-int QuadTreeBuilder::createViz()
+int QuadTreeBuilder::createBuildViz()
 {
 	if ((width<0) || (height<0))
 	{
-		fprintf(stderr, "QuadTreeBuilder::createViz(): width or height < 0, must initialize prior to vizualization\n");
+		fprintf(stderr, "QuadTreeBuilder::createBuildViz(): width or height < 0, must initialize prior to vizualization\n");
 		return -1;
 	}
 
@@ -341,11 +395,10 @@ int QuadTreeBuilder::createViz()
 	//Write point last to avoid occulsion by lines (no alpha blending)
 	d_writeData2Image<<<blocks, threads>>>(d_img, d_x, d_y, width, height, numData);
 
-
 	checkCudaErrors(cudaEventRecord(stop, 0));
 	checkCudaErrors(cudaEventSynchronize(stop));
 	checkCudaErrors(cudaEventElapsedTime(&elpsTime, start, stop));
-	printf("\n\nElapsed time for creating viz:    %9.6f ms \n", elpsTime);
+	printf("\n\nElapsed time for creating build viz:      %9.6f ms \n", elpsTime);
 	return 0;
 }
 
@@ -387,6 +440,29 @@ int QuadTreeBuilder::resetData()
 	return 0;
 }
 
+int QuadTreeBuilder::resetFilterData()
+{
+	if ((width<0) || (height<0))
+	{
+		fprintf(stderr, "QuadTreeBuilder::resetFilterData(): width or height < 0, must initialize prior to data generation\n");
+		return -1;
+	}
+
+	//Generate Random Data
+	checkCudaErrors(cudaEventRecord(start, 0));
+
+	int seed = (int)time(0);
+
+	generate_uniform2Dfilter_kernel<<<blocks, threads>>>(d_x, d_y, d_score, seed, width, height, numData);
+
+	checkCudaErrors(cudaEventRecord(stop, 0));
+	checkCudaErrors(cudaEventSynchronize(stop));
+	checkCudaErrors(cudaEventElapsedTime(&elpsTime, start, stop));
+	printf("\n\nElapsed time make Random Filter Data:     %9.6f ms \n", elpsTime);
+
+	return 0;
+}
+
 //Resets arrays used in constructing the quad tree
 void QuadTreeBuilder::ResetArrays()
 {
@@ -407,4 +483,10 @@ void QuadTreeBuilder::ComputeBoundingBox()
 void QuadTreeBuilder::BuildQuadTree()
 {
 	build_tree_kernel<<<blocks, threads>>>(d_x, d_y, d_rx, d_ry, d_child, d_index, d_left, d_right, d_bottom, d_top, numData, numNodes);
+}
+
+//Filter with quad tree
+void QuadTreeBuilder::FilterQuadTree(const int d, const int f)
+{
+	filter_tree_kernel<<<blocks, threads>>>(d_x, d_y, d_rx, d_score, d_ry, d_child, d_index, d_left, d_right, d_bottom, d_top, numData, numNodes, d, f);
 }
