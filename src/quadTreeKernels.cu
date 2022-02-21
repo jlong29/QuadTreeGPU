@@ -226,6 +226,7 @@ __global__ void reset_arrays_kernel(int* mutex, float* x, float* y, float* rx, f
 		offset += stride;
 	}
 
+	//To ensure the write below doesn't get overwritten from above
 	__threadfence();
 
 	//Set bounds to image bounds
@@ -553,7 +554,7 @@ __global__ void filter_tree_kernel(volatile float* x, volatile float* y, volatil
 			b = *bottom;
 			t = *top;
 
-			node      = 0;
+			node      = n;
 			childPath = 0;
 			posX      = x[idx];
 			posY      = y[idx];
