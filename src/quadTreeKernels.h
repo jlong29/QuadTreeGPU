@@ -20,6 +20,8 @@ namespace quadTreeKernels
 __global__ void d_setBlackImag(uchar4* dst, const int w, const int h);
 //Write 2D noise data to image buffer
 __global__ void d_writeData2Image(uchar4* dst, const float* __restrict noiseX, const float* __restrict noiseY,const int w, const int h, const int n);
+//Write 2D filtered noise data to the image buffer
+__global__ void d_writeFilter2Image(uchar4* dst, const float* __restrict filterX, const float* __restrict filterY,const int w, const int h, const int n);
 //Draw internal edges of cells
 __global__ void d_drawCellInnerEdges(uchar4* dst, int* index, const float* __restrict x, const float* __restrict y, const float* __restrict rx, const float* __restrict ry,
 										const int w, const int h, const int n, const int m);
@@ -34,6 +36,13 @@ __global__ void generate_uniform2Dfilter_kernel(float* noiseX, float* noiseY, fl
 __global__ void reset_arrays_kernel(int* mutex, float* x, float* y, float* rx, float* ry, int* child, int* index, float* left, float* right, float* bottom, float* top, int n, int m);
 __global__ void reset_arrays_kernel(int* mutex, float* x, float* y, float* rx, float* ry, int* child, int* index, float* left, float* right, float* bottom, float* top, const int w, const int h, int n, int m);
 
+__global__ void reset_filter_arrays_kernel(int* mutex, float* x, float* y, float* score, float* xf, float* yf, float* scoref,
+											float* rx, float* ry, int* child, int* index, float* left, float* right, float* bottom, float* top,
+											const int f, int n, int m);
+__global__ void reset_filter_arrays_kernel(int* mutex, float* x, float* y, float* score, float* xf, float* yf, float* scoref,
+											float* rx, float* ry, int* child, int* index, float* left, float* right, float* bottom, float* top,
+											const int f, const int w, const int h, int n, int m);
+
 __global__ void compute_bounding_box_kernel(int *mutex, int* index, float *x, float *y, float* rx, float* ry, volatile float *left, volatile float *right, volatile float *bottom, volatile float* top, int n);
 
 __global__ void build_tree_kernel(volatile float* x, volatile float* y, float* rx, float* ry, volatile int* child, int* index,
@@ -46,8 +55,8 @@ __global__ void filter_tree_kernel(volatile float* x, volatile float* y, volatil
 									const int n, const int m, const int d, const int f);
 
 __global__ void pack_filtered_data_kernel(float* xf, float* yf, float* scoref,
-											volatile float* x, volatile float* y, volatile float* score,
-											volatile int* child, const int n, const int d, const int f);
+											float* x, float* y, float* score,
+											int* child, const int n, const int d, const int f);
 
 } // namespace quadTreeKernels
 

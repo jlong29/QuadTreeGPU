@@ -86,12 +86,15 @@ class QuadTreeBuilder
 		int build();
 
 		//filter the data from m > n points to n points according to highest score
-		int filter(const int d, const int f);
+		int filter();
 
 		//Create build visualization
 		int createBuildViz();
+		//Create filter visualization
+		int createFilterViz();
 
 		int downloadData();
+		int downloadFilterData();
 
 	private:
 		//Root GPU Launch Optimization
@@ -105,6 +108,9 @@ class QuadTreeBuilder
 		//Resets arrays used in constructing the quad tree
 		void ResetArrays();
 		void ResetArrays(const int w, const int h);
+		void ResetFilterArrays(const int f);
+		void ResetFilterArrays(const int f, const int w, const int h);
+
 		void ComputeBoundingBox();
 		void BuildQuadTree();
 		void FilterQuadTree(const int d, const int f);

@@ -29,6 +29,14 @@ __device__ __inline__ void setGreenHue(const uchar& hue, uchar4& RGBA)
 	RGBA.y = hue;
 	RGBA.z = 0;
 	RGBA.w = 255;
+
+}
+__device__ __inline__ void setBlueHue(const uchar& hue, uchar4& RGBA)
+{
+	RGBA.x = 0;
+	RGBA.y = 0;
+	RGBA.z = hue;
+	RGBA.w = 255;
 }
 __device__ __inline__ void setBlack(uchar4& RGBA)
 {
@@ -67,6 +75,20 @@ __global__ void d_writeData2Image(uchar4* dst, const float* __restrict noiseX, c
 		int shotY = (int)noiseY[i];
 		if (in_img(shotX, shotY, w, h))
 			setGreenHue(255, dst[shotY*w + shotX]);
+	}
+}
+
+__global__ void d_writeFilter2Image(uchar4* dst, const float* __restrict filterX, const float* __restrict filterY,const int w, const int h, const int n)
+{
+	int idx        = threadIdx.x + blockIdx.x * blockDim.x;
+	int numThreads = blockDim.x*gridDim.x;
+
+	for(int i = idx; i < n; i+=numThreads)
+	{
+		int shotX = (int)filterX[i];
+		int shotY = (int)filterY[i];
+		if (in_img(shotX, shotY, w, h))
+			setBlueHue(255, dst[shotY*w + shotX]);
 	}
 }
 
@@ -247,6 +269,103 @@ __global__ void reset_arrays_kernel(int* mutex, float* x, float* y, float* rx, f
 	}
 }
  
+__global__ void reset_filter_arrays_kernel(int* mutex, float* x, float* y, float* score, float* xf, float* yf, float* scoref,
+											float* rx, float* ry, int* child, int* index, float* left, float* right, float* bottom, float* top,
+											const int f, int n, int m)
+{
+	int idx = threadIdx.x + blockDim.x*blockIdx.x;
+	int stride = blockDim.x*gridDim.x;
+	int offset = 0;
+
+	// reset quadtree arrays
+	while(idx + offset < m)
+	{  
+#pragma unroll 4
+		for(int i=0;i<4;i++)
+		{
+			child[(idx + offset)*4 + i] = -1;
+		}
+		if (idx + offset < f)
+		{
+			xf[idx + offset] = CUDART_NAN_F;
+			yf[idx + offset] = CUDART_NAN_F;
+			scoref[idx + offset]  = CUDART_NAN_F;
+		}
+		if(idx + offset >= n)
+		{
+			x[idx + offset] = CUDART_NAN_F;
+			y[idx + offset] = CUDART_NAN_F;
+			score[idx + offset]  = CUDART_NAN_F;
+			rx[idx + offset - n] = CUDART_NAN_F;
+			ry[idx + offset - n] = CUDART_NAN_F;
+		}
+		offset += stride;
+	}
+
+	if(idx == 0)
+	{
+		*mutex = 0;
+		*index = n;
+		*left = CUDART_INF_F;
+		*right = -CUDART_INF_F;
+		*bottom = CUDART_INF_F;
+		*top = -CUDART_INF_F;
+	}
+}
+
+__global__ void reset_filter_arrays_kernel(int* mutex, float* x, float* y, float* score, float* xf, float* yf, float* scoref,
+											float* rx, float* ry, int* child, int* index, float* left, float* right, float* bottom, float* top,
+											const int f, const int w, const int h, int n, int m)
+{
+	int idx = threadIdx.x + blockDim.x*blockIdx.x;
+	int stride = blockDim.x*gridDim.x;
+	int offset = 0;
+
+	// reset quadtree arrays
+	while(idx + offset < m)
+	{  
+#pragma unroll 4
+		for(int i=0;i<4;i++)
+		{
+			child[(idx + offset)*4 + i] = -1;
+		}
+		if (idx + offset < f)
+		{
+			xf[idx + offset] = CUDART_NAN_F;
+			yf[idx + offset] = CUDART_NAN_F;
+			scoref[idx + offset]  = CUDART_NAN_F;
+		}
+		if(idx + offset >= n)
+		{
+			x[idx + offset] = CUDART_NAN_F;
+			y[idx + offset] = CUDART_NAN_F;
+			rx[idx + offset - n] = CUDART_NAN_F;
+			ry[idx + offset - n] = CUDART_NAN_F;
+		}
+		offset += stride;
+	}
+
+	//To ensure the write below doesn't get overwritten from above
+	__threadfence();
+
+	//Set bounds to image bounds
+	if(idx == 0)
+	{
+		*mutex = 0;
+		*index = n+1;	//Set to n + 1 to allow for root
+		*left = 0.0f;
+		*right = (float)w;
+		*bottom = 0.0f;
+		*top = (float)h;
+		//set root coordinates
+		//Create a new cell, starting at index n
+		x[n]  = 0.5f*(float)w;
+		y[n]  = 0.5f*(float)h;
+		rx[0] = 0.5f*(float)w;
+		ry[0] = 0.5f*(float)h;
+	}
+}
+
 __global__ void compute_bounding_box_kernel(int* mutex, int* index, float* x, float* y, float* rx, float* ry, volatile float* left, volatile float* right, volatile float* bottom, volatile float* top, int n)
 {
 	//TODO: optimize using warps
@@ -636,10 +755,16 @@ __global__ void filter_tree_kernel(volatile float* x, volatile float* y, volatil
 						//If f cells already created, filter by response
 						if (cell - n > f)
 						{
+							printf("Cell is %d and f is %d\n", cell -n, f);
+
 							if (score[childIndex] < score[idx])
 							{
 								// Replace data and release lock
 								child[locked] = idx;
+							} else
+							{
+								//... or put it back to unlock
+								child[locked] = childIndex;
 							}
 							bMoreCells = false;
 							break;
@@ -726,8 +851,8 @@ __global__ void filter_tree_kernel(volatile float* x, volatile float* y, volatil
 }
 
 __global__ void pack_filtered_data_kernel(float* xf, float* yf, float* scoref,
-											volatile float* x, volatile float* y, volatile float* score,
-											volatile int* child, const int n, const int d, const int f)
+											float* x, float* y, float* score,
+											int* child, const int n, const int d, const int f)
 {
 	/*
 	Data filtered through the Quad Tree are scattered across the child array. We need to pack

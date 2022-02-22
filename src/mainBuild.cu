@@ -73,6 +73,8 @@ static void show_usage(std::string name)
 			  << std::endl;
 }
 
+int runBuild();
+
 int main(int argc, char** argv)
 {
 	//Input Parameters
@@ -169,36 +171,11 @@ int main(int argc, char** argv)
 		return -1;
 	}
 
-	//Set random data
-	if (quadTree.resetData() < 0)
+	if (runBuild() < 0)
 	{
 		cleanup();
 		return -1;
 	}
-
-	// BUILD QUAD TREE
-	quadTree.build();
-
-	//Visualize output
-	if (quadTree.createBuildViz() < 0)
-	{
-		cleanup();
-		return -1;
-	}
-
-	//Download data
-	if (quadTree.downloadData() < 0)
-	{
-		cleanup();
-		return -1;
-	}
-
-	printf("Printing out 2D Noise:\n\t");
-	for (int ii = 0; ii < min(100, N); ii++)
-	{
-		printf("[%d, %d], ", (int)quadTree.h_x[ii], (int)quadTree.h_y[ii]);
-	}
-	printf("\n");
 
 	//convert device memory to texture
 	cudaArray_t ArrIm;
@@ -293,40 +270,11 @@ void display()
 	{
 		bReset = false;
 
-		//Set random data
-		if (quadTree.resetData() < 0)
+		if (runBuild() < 0)
 		{
 			cleanup();
 			return;
 		}
-
-		// BUILD QUAD TREE
-		if (quadTree.build() < 0)
-		{
-			cleanup();
-			return;
-		}
-
-		//Visualize output
-		if (quadTree.createBuildViz() < 0)
-		{
-			cleanup();
-			return;
-		}
-
-		//Download data
-		if (quadTree.downloadData() < 0)
-		{
-			cleanup();
-			return;
-		}
-
-		printf("Printing out 2D Noise:\n\t");
-		for (int ii = 0; ii < min(100, N); ii++)
-		{
-			printf("[%d, %d], ", (int)quadTree.h_x[ii], (int)quadTree.h_y[ii]);
-		}
-		printf("\n");
 
 		//convert device memory to texture
 		cudaArray_t ArrIm;
@@ -422,4 +370,37 @@ void cleanup()
 	quadTree.deallocate();
 
 	fprintf(stdout,"\t\tAll Cuda resources cleaned\n");
+}
+
+int runBuild()
+{
+	//Set random data
+	if (quadTree.resetData() < 0)
+	{
+		return -1;
+	}
+
+	// BUILD QUAD TREE
+	quadTree.build();
+
+	//Visualize output
+	if (quadTree.createBuildViz() < 0)
+	{
+		return -1;
+	}
+
+	//Download data
+	if (quadTree.downloadData() < 0)
+	{
+		return -1;
+	}
+
+	printf("Printing out 2D Noise:\n\t");
+	for (int ii = 0; ii < min(100, N); ii++)
+	{
+		printf("[%d, %d], ", (int)quadTree.h_x[ii], (int)quadTree.h_y[ii]);
+	}
+	printf("\n");
+
+	return 0;
 }

@@ -300,13 +300,17 @@ QuadTreeBuilder.o: $(SRC_DIR)/QuadTreeBuilder.cu $(SRC_DIR)/QuadTreeBuilder.h
 mainBuild.o:$(SRC_DIR)/mainBuild.cu
 	$(EXEC) $(NVCC) $(INCLUDES) $(ALL_CCFLAGS) -std=c++11 $(GENCODE_FLAGS) -c $<
 
+# main filter object
+mainFilter.o:$(SRC_DIR)/mainFilter.cu
+	$(EXEC) $(NVCC) $(INCLUDES) $(ALL_CCFLAGS) -std=c++11 $(GENCODE_FLAGS) -c $<
+
 # main build application
 quadTreeGPU: mainBuild.o QuadTreeBuilder.o quadTreeKernels.o
 	$(EXEC) $(NVCC) $(ALL_LDFLAGS) $(GENCODE_FLAGS) -o $@ $+ $(LIBRARIES)
 	$(EXEC) mv $@ ./bin
 
 # main build application
-quadTreeFilterGPU: mainBuild.o QuadTreeBuilder.o quadTreeKernels.o
+quadTreeFilterGPU: mainFilter.o QuadTreeBuilder.o quadTreeKernels.o
 	$(EXEC) $(NVCC) $(ALL_LDFLAGS) $(GENCODE_FLAGS) -o $@ $+ $(LIBRARIES)
 	$(EXEC) mv $@ ./bin
 

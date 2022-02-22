@@ -26,6 +26,8 @@ static bool bReset = false;
 // GLOBAL Variables //
 //Problem Size
 //Parameters
+int D;
+int F;
 int N;
 int W;
 int H;
@@ -68,15 +70,21 @@ static void show_usage(std::string name)
 			  << "Options:\n"
 			  << "\t-i,--help\tShow this help message\n"
 			  << "\t-n,\t\tset the number of data points to generate\n"
+			  << "\t-d,\t\tset the number of data points to generate then filtered\n"
+			  << "\t-f,\t\tset the number of filtered data points to generate\n"
 			  << "\t-w,\t\tset the width of the image plane\n"
 			  << "\t-h,\t\tset the height of the image plane\n"
 			  << std::endl;
 }
 
+int runFilter();
+
 int main(int argc, char** argv)
 {
 	//Input Parameters
-	N = 16;
+	D = 16;
+	F = D/2;
+	N = 2*D;
 	W = 640;
 	H = 480;
 
@@ -92,6 +100,26 @@ int main(int argc, char** argv)
 			if (i + 1 < argc)
 			{
 				N = (size_t)atoi(argv[++i]);
+			} else
+			{
+				fprintf(stderr, "-n option requires one argument indicating a sample size.\n");
+				return -1;
+			}
+		} else if (arg == "-d")
+		{
+			if (i + 1 < argc)
+			{
+				D = (size_t)atoi(argv[++i]);
+			} else
+			{
+				fprintf(stderr, "-n option requires one argument indicating a sample size.\n");
+				return -1;
+			}
+		} else if (arg == "-f")
+		{
+			if (i + 1 < argc)
+			{
+				F = (size_t)atoi(argv[++i]);
 			} else
 			{
 				fprintf(stderr, "-n option requires one argument indicating a sample size.\n");
@@ -120,11 +148,24 @@ int main(int argc, char** argv)
 		}
 	}
 
+	//Check input constraints
+	if (N < D)
+	{
+		N = 2*D;
+		fprintf(stdout, "Setting N to 2*D because inputs had N < D\n");
+	}
+	if (F >= D)
+	{
+		fprintf(stderr, "The number of filtered data points must be less than the number of generated data points\n");
+		show_usage(argv[0]);
+		return -1;
+	}
+	//Set window parameters
 	window_width  = W;
 	window_height = H;
 
 	//Set QuadTreeBuilder parameters
-	quadTree.setParameters(N, W, H);
+	quadTree.setParameters(N, W, H, D, F);
 
 	//initialize timers
 	fpsCount   = 0;
@@ -169,36 +210,11 @@ int main(int argc, char** argv)
 		return -1;
 	}
 
-	//Set random data
-	if (quadTree.resetData() < 0)
+	if (runFilter() < 0)
 	{
 		cleanup();
 		return -1;
 	}
-
-	// BUILD QUAD TREE
-	quadTree.build();
-
-	//Visualize output
-	if (quadTree.createBuildViz() < 0)
-	{
-		cleanup();
-		return -1;
-	}
-
-	//Download data
-	if (quadTree.downloadData() < 0)
-	{
-		cleanup();
-		return -1;
-	}
-
-	printf("Printing out 2D Noise:\n\t");
-	for (int ii = 0; ii < min(100, N); ii++)
-	{
-		printf("[%d, %d], ", (int)quadTree.h_x[ii], (int)quadTree.h_y[ii]);
-	}
-	printf("\n");
 
 	//convert device memory to texture
 	cudaArray_t ArrIm;
@@ -293,40 +309,11 @@ void display()
 	{
 		bReset = false;
 
-		//Set random data
-		if (quadTree.resetData() < 0)
+		if (runFilter() < 0)
 		{
 			cleanup();
 			return;
 		}
-
-		// BUILD QUAD TREE
-		if (quadTree.build() < 0)
-		{
-			cleanup();
-			return;
-		}
-
-		//Visualize output
-		if (quadTree.createBuildViz() < 0)
-		{
-			cleanup();
-			return;
-		}
-
-		//Download data
-		if (quadTree.downloadData() < 0)
-		{
-			cleanup();
-			return;
-		}
-
-		printf("Printing out 2D Noise:\n\t");
-		for (int ii = 0; ii < min(100, N); ii++)
-		{
-			printf("[%d, %d], ", (int)quadTree.h_x[ii], (int)quadTree.h_y[ii]);
-		}
-		printf("\n");
 
 		//convert device memory to texture
 		cudaArray_t ArrIm;
@@ -422,4 +409,50 @@ void cleanup()
 	quadTree.deallocate();
 
 	fprintf(stdout,"\t\tAll Cuda resources cleaned\n");
+}
+
+int runFilter()
+{
+	//Set random data
+	if (quadTree.resetData() < 0)
+	{
+		return -1;
+	}
+
+	// FILTER WITH QUAD TREE
+	quadTree.filter();
+
+	//Visualize output
+	if (quadTree.createFilterViz() < 0)
+	{
+		return -1;
+	}
+
+	//Download data
+	if (quadTree.downloadData() < 0)
+	{
+		return -1;
+	}
+
+	//Download filter data
+	if (quadTree.downloadFilterData() < 0)
+	{
+		return -1;
+	}
+
+	printf("Printing out 2D Noise:\n\t");
+	for (int ii = 0; ii < min(100, N); ii++)
+	{
+		printf("[%d, %d], ", (int)quadTree.h_x[ii], (int)quadTree.h_y[ii]);
+	}
+	printf("\n");
+
+	printf("Printing out 2D FILTERED Noise:\n\t");
+	for (int ii = 0; ii < min(100, F); ii++)
+	{
+		printf("[%d, %d], ", (int)quadTree.h_xf[ii], (int)quadTree.h_yf[ii]);
+	}
+	printf("\n");
+
+	return 0;
 }
