@@ -113,7 +113,7 @@ class QuadTreeBuilder
 
 		void ComputeBoundingBox();
 		void BuildQuadTree();
-		void FilterQuadTree(const int d, const int f);
+		void FilterQuadTree(const int d, const int q, const int f);
 
 		static inline int divUp(int x, int y)
 		{

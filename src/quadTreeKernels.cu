@@ -7,7 +7,7 @@
 namespace quadTreeKernels
 {
 
-// #define DEBUG
+#define DEBUG
 
 // Image Processing //
 //Image bounds check
@@ -852,7 +852,7 @@ __global__ void filter_tree_kernel(volatile float* x, volatile float* y, volatil
 
 __global__ void pack_filtered_data_kernel(float* xf, float* yf, float* scoref,
 											float* x, float* y, float* score,
-											int* child, const int n, const int d, const int f)
+											int* child, const int n, const int d, const int q)
 {
 	/*
 	Data filtered through the Quad Tree are scattered across the child array. We need to pack
@@ -865,11 +865,11 @@ __global__ void pack_filtered_data_kernel(float* xf, float* yf, float* scoref,
 	index:	a global index start at n
 	n:		root of tree node index
 	d:		the number of current data
-	f:		the number of filtered data
+	q:		the number of filtered data
 	*/
 
 	int idx = threadIdx.x + blockIdx.x*blockDim.x;
-	if (idx >= f)
+	if (idx >= q)
 		return;
 
 	int parentIndex;
@@ -948,7 +948,7 @@ __global__ void pack_filtered_data_kernel(float* xf, float* yf, float* scoref,
 
 		//DEBUGGING
 		#ifdef DEBUG
-		if (iterations > 5*f)
+		if (iterations > 5*q)
 		{
 			printf("Thread %d has gone around %d times. Breaking...\n", idx, iterations);
 			//dummy value to ensure no segfault
@@ -957,6 +957,8 @@ __global__ void pack_filtered_data_kernel(float* xf, float* yf, float* scoref,
 		}
 		#endif
 	}
+
+	printf("thread %d writing out childIndex %d\n", idx, childIndex);
 
 	//Write out into packed array
 	xf[idx]     = x[childIndex];

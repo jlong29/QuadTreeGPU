@@ -56,7 +56,7 @@ __global__ void filter_tree_kernel(volatile float* x, volatile float* y, volatil
 
 __global__ void pack_filtered_data_kernel(float* xf, float* yf, float* scoref,
 											float* x, float* y, float* score,
-											int* child, const int n, const int d, const int f);
+											int* child, const int n, const int d, const int q);
 
 } // namespace quadTreeKernels
 
