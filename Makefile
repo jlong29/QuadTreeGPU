@@ -265,7 +265,7 @@ endif
 # Target rules
 all: build
 
-build: quadTreeGPU
+build: quadTreeGPU quadTreeFilterGPU
 
 check.incs:
 	@echo $(INCLUDES)
@@ -297,16 +297,21 @@ QuadTreeBuilder.o: $(SRC_DIR)/QuadTreeBuilder.cu $(SRC_DIR)/QuadTreeBuilder.h
 	$(EXEC) $(NVCC) $(INCLUDES) $(ALL_CCFLAGS) -std=c++11 $(GENCODE_FLAGS) -c $<
 
 # main application object
-main.o:$(SRC_DIR)/main.cu
+mainBuild.o:$(SRC_DIR)/mainBuild.cu
 	$(EXEC) $(NVCC) $(INCLUDES) $(ALL_CCFLAGS) -std=c++11 $(GENCODE_FLAGS) -c $<
 
-# main application build
-quadTreeGPU: main.o QuadTreeBuilder.o quadTreeKernels.o
+# main build application
+quadTreeGPU: mainBuild.o QuadTreeBuilder.o quadTreeKernels.o
+	$(EXEC) $(NVCC) $(ALL_LDFLAGS) $(GENCODE_FLAGS) -o $@ $+ $(LIBRARIES)
+	$(EXEC) mv $@ ./bin
+
+# main build application
+quadTreeFilterGPU: mainBuild.o QuadTreeBuilder.o quadTreeKernels.o
 	$(EXEC) $(NVCC) $(ALL_LDFLAGS) $(GENCODE_FLAGS) -o $@ $+ $(LIBRARIES)
 	$(EXEC) mv $@ ./bin
 
 .PHONY: clean
 clean:
-	rm -f ./bin/quadTreeGPU ./*.o
+	rm -f ./bin/* ./*.o
 
 clobber: clean

@@ -528,7 +528,7 @@ __global__ void filter_tree_kernel(volatile float* x, volatile float* y, volatil
 	n:		the number of possible data
 	m:		the number of possible nodes
 	d:		the number of current data
-	f:		the desired number of data after filtering
+	f:		the maximum number of cells to be created, which limits data by single occupancy filter
 	*/
 
 	int idx    = threadIdx.x + blockIdx.x*blockDim.x;
@@ -621,7 +621,9 @@ __global__ void filter_tree_kernel(volatile float* x, volatile float* y, volatil
 				else{
 					//Sets max on number of cells
 					int patch = 4*n;
-					while(childIndex >= 0){
+					bool bMoreCells = true;
+					while(childIndex >= 0)
+					{
 
 						// childIndex should always be -1, unallocated, or >=0, allocated
 
@@ -631,14 +633,15 @@ __global__ void filter_tree_kernel(volatile float* x, volatile float* y, volatil
 						//Compare against maximum allowable cells
 						patch = min(patch, cell);
 
-						//If we have already created f cells, filter by response
+						//If f cells already created, filter by response
 						if (cell - n > f)
 						{
-							if score[childIndex] < score[idx]
+							if (score[childIndex] < score[idx])
 							{
 								// Replace data and release lock
 								child[locked] = idx;
 							}
+							bMoreCells = false;
 							break;
 						}
 
@@ -698,13 +701,16 @@ __global__ void filter_tree_kernel(volatile float* x, volatile float* y, volatil
 						childIndex = child[4*node + childPath];
 					}
 
-					//This means childIndex is set to -1, unallocated, so allocated as body Index
-					child[4*node + childPath] = idx;
+					if (bMoreCells)
+					{
+						//This means childIndex is set to -1, unallocated, so allocated as body Index
+						child[4*node + childPath] = idx;
 
-					__threadfence();  // Ensures all writes to global memory are complete before lock is released
+						__threadfence();  // Ensures all writes to global memory are complete before lock is released
 
-					//Release lock and replace leaf with this cell
-					child[locked] = patch;
+						//Release lock and replace leaf with this cell
+						child[locked] = patch;
+					}
 				}	// if(childIndex == -1): first assignment to body or not
 
 				//Advance to next body
@@ -801,9 +807,9 @@ __global__ void pack_filtered_data_kernel(float* xf, float* yf, float* scoref,
 			if (childIndex > 0)
 			{
 				//Advance to next level down tree
-				notAtTop   = true;
-				parentIdx  = tmpIdx;
-				parentNode = childIndex;
+				notAtTop    = true;
+				parentIndex = tmpIdx;
+				parentNode  = childIndex;
 				break;
 			}
 		}
@@ -812,7 +818,7 @@ __global__ void pack_filtered_data_kernel(float* xf, float* yf, float* scoref,
 		if (!notAtTop)
 		{
 			//It doesn't matter which thread gets here first
-			atomicExch(&child[parentIdx], -1);
+			atomicExch((int*)&child[parentIndex], -1);
 		}
 
 		//DEBUGGING
