@@ -336,7 +336,7 @@ __global__ void build_tree_kernel(volatile float *x, volatile float *y, float* r
 	/*
 	This routine combines building the Quad Tree with summarizing internal node information
 	index:	a global index start at n
-	n:		the number of bodies
+	n:		the number of data
 	m:		the number of possible nodes
 	*/
 
@@ -492,7 +492,7 @@ __global__ void build_tree_kernel(volatile float *x, volatile float *y, float* r
 
 						//Set to value of child at this entry, which could be:
 						// -1 == break
-						// > n if a cell was created while this thread was locked
+						// > n if both particles hit the same node, requiring further sub-division
 						childIndex = child[4*node + childPath];
 					}
 
@@ -523,9 +523,9 @@ __global__ void filter_tree_kernel(volatile float* x, volatile float* y, volatil
 									const int n, const int m, const int d, const int f)
 {
 	/*
-	This routine combines building the Quad Tree with summarizing internal node information
+	This routine combines building the Quad Tree with spatial filtering and summarizing internal node information
 	index:	a global index start at n
-	n:		the number of bodies
+	n:		the number of possible data
 	m:		the number of possible nodes
 	d:		the number of current data
 	f:		the desired number of data after filtering
@@ -544,7 +544,7 @@ __global__ void filter_tree_kernel(volatile float* x, volatile float* y, volatil
 
 	bool newBody  = true;
 	float posX, posY;
-	while(idx < n){
+	while(idx < d){
 
 		if(newBody){
 			newBody = false;
@@ -581,9 +581,9 @@ __global__ void filter_tree_kernel(volatile float* x, volatile float* y, volatil
 
 		// traverse tree until we hit leaf node (could be allocated or not)
 
-		//NOTE: childIndex >= n means we are in a cell not a leaf
+		//NOTE: childIndex >= d means we are in a cell not a leaf
 		// You could also land in an unallocated (-1) or locked (-2) node
-		while(childIndex >= n){
+		while(childIndex >= d){
 			//Check body location within the 4 quads of this node
 			node = childIndex;
 			childPath = 0;
@@ -606,11 +606,11 @@ __global__ void filter_tree_kernel(volatile float* x, volatile float* y, volatil
 			childIndex = child[4*node + childPath];
 		}
 
-		//At this point childIndex: [-1 n]
+		//At this point childIndex: [-1 d]
 
 		// Check if child is already locked i.e. childIndex == -2
 		if(childIndex != -2){
-			//Acquire lock, which is only possible if child[locked]: [-1 n]
+			//Acquire lock, which is only possible if child[locked]: [-1 d]
 			int locked = node*4 + childPath;
 			if(atomicCAS((int*)&child[locked], childIndex, -2) == childIndex){
 				//If unallocated, insert body and unlock
@@ -630,6 +630,17 @@ __global__ void filter_tree_kernel(volatile float* x, volatile float* y, volatil
 
 						//Compare against maximum allowable cells
 						patch = min(patch, cell);
+
+						//If we have already created f cells, filter by response
+						if (cell - n > f)
+						{
+							if score[childIndex] < score[idx]
+							{
+								// Replace data and release lock
+								child[locked] = idx;
+							}
+							break;
+						}
 
 						//If the maximum number of cells have been reached:
 						// It prunes away the node above
@@ -706,6 +717,120 @@ __global__ void filter_tree_kernel(volatile float* x, volatile float* y, volatil
 		// Wait for threads in block to release locks to reduce memory pressure
 		__syncthreads(); // not needed for correctness
 	}
+}
+
+__global__ void pack_filtered_data_kernel(float* xf, float* yf, float* scoref,
+											volatile float* x, volatile float* y, volatile float* score,
+											volatile int* child, const int n, const int d, const int f)
+{
+	/*
+	Data filtered through the Quad Tree are scattered across the child array. We need to pack
+	them into xf, yf, and scoref.
+
+	It uses depth-first search.
+
+	Marking leaves or internal cells as -1 means they have been fully processed (unallocated again)
+
+	index:	a global index start at n
+	n:		root of tree node index
+	d:		the number of current data
+	f:		the number of filtered data
+	*/
+
+	int idx = threadIdx.x + blockIdx.x*blockDim.x;
+	if (idx >= f)
+		return;
+
+	int parentIndex;
+	int parentNode;
+
+	//Every thread will hit a leaf
+	int  childIndex;
+	bool notAtTop = false;
+
+	int iterations = 0;
+	while(true)
+	{
+		iterations++;
+
+		//Start at the top of the tree
+		if (!notAtTop)
+		{
+			//Start at Root Node
+			parentNode = n;
+
+			//Inspect children of root for initial parentIndex
+			// - At least one of them should always be active
+			for (int i = 0; i< 4; i++)
+			{
+				//Returns the NEXT parent node when indexing child array
+				parentIndex = 4*parentNode + i;
+
+				childIndex  = child[parentIndex];
+				if (childIndex > 0)
+				{
+					//Advance down the tree and assign new parent node
+					parentNode = childIndex;
+					break;
+				}
+			}
+		}
+
+		//Leaf check
+		if ((childIndex < d) && (childIndex >=0))
+		{
+			//We're at a leaf, so set to unallocated = -1
+			if(atomicCAS((int*)&child[parentIndex], childIndex, -1) == childIndex)
+			{
+				//This thread is the first here, so the childIndex goes with it
+				break;
+			} else
+			{
+				//This thread didn't get here fast enough, so it has to start over
+				notAtTop = false;
+				continue;
+			}
+		}
+
+		//Inspect children of this parent cell
+		notAtTop = false;	//assume all children are done
+		for (int i = 0; i< 4; i++)
+		{
+			int tmpIdx = 4*parentNode + 1;
+			childIndex = child[tmpIdx];
+			if (childIndex > 0)
+			{
+				//Advance to next level down tree
+				notAtTop   = true;
+				parentIdx  = tmpIdx;
+				parentNode = childIndex;
+				break;
+			}
+		}
+
+		//If all children are done, then mark parent as done and go back to the top
+		if (!notAtTop)
+		{
+			//It doesn't matter which thread gets here first
+			atomicExch(&child[parentIdx], -1);
+		}
+
+		//DEBUGGING
+		#ifdef DEBUG
+		if (iterations > 5*f)
+		{
+			printf("Thread %d has gone around %d times. Breaking...\n", idx, iterations);
+			//dummy value to ensure no segfault
+			childIndex = 0;
+			break;
+		}
+		#endif
+	}
+
+	//Write out into packed array
+	xf[idx]     = x[childIndex];
+	yf[idx]     = y[childIndex];
+	scoref[idx] = score[childIndex];
 }
 
 } // namespace quadTreeKernels
