@@ -763,34 +763,29 @@ __global__ void filter_tree_kernel(volatile float* x, volatile float* y, volatil
 						if (cell - n >= f)
 						{
 							// printf("Cell is %d and f is %d\n", cell -n, f);
-
+							int keeper = idx;
 							if (score[childIndex] < score[idx])
 							{
 								// Replace data and release lock
 								printf("\tSwapping %d with %d\n", childIndex, idx);
-								if (parentCell > 0)
-								{
-									child[tmpIdx] = idx;
-									__threadfence();
-									child[locked] = parentCell;
-								} else
-								{
-									child[locked] = idx;
-								}
+								keeper = idx;
 							} else
 							{
 								//... or put it back to unlock
 								printf("\tKeeping %d over %d\n", childIndex, idx);
-								if (parentCell > 0)
-								{
-									child[tmpIdx] = childIndex;
-									__threadfence();
-									child[locked] = parentCell;
-								} else
-								{
-									child[locked] = childIndex;
-								}
+								keeper = childIndex;
 							}
+							//Check for the case of new and old data landing in same node
+							if (parentCell > 0)
+							{
+								child[tmpIdx] = keeper;
+								__threadfence();
+								child[locked] = parentCell;
+							} else
+							{
+								child[locked] = keeper;
+							}
+
 							bMoreCells = false;
 							break;
 						}
