@@ -637,5 +637,5 @@ void QuadTreeBuilder::BuildQuadTree()
 void QuadTreeBuilder::FilterQuadTree(const int d, const int q, const int f)
 {
 	filter_tree_kernel<<<blocks, threads>>>(d_x, d_y, d_score, d_rx, d_ry, d_child, d_index, d_left, d_right, d_bottom, d_top, numData, numNodes, d, f);
-	// pack_filtered_data_kernel<<<blocks, threads>>>(d_xf, d_yf, d_scoref, d_x, d_y, d_score, d_child, numData, d, q);
+	pack_filtered_data_kernel<<<blocks, threads>>>(d_xf, d_yf, d_scoref, d_x, d_y, d_score, d_child, numData, d, q);
 }

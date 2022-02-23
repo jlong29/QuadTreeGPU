@@ -904,6 +904,7 @@ __global__ void pack_filtered_data_kernel(float* xf, float* yf, float* scoref,
 	int idx = threadIdx.x + blockIdx.x*blockDim.x;
 	if (idx >= q)
 		return;
+	int lane = threadIdx.x % 4;
 
 	int parentIndex;
 	int parentNode;
@@ -925,18 +926,15 @@ __global__ void pack_filtered_data_kernel(float* xf, float* yf, float* scoref,
 
 			//Inspect children of root for initial parentIndex
 			// - At least one of them should always be active
-			for (int i = 0; i< 4; i++)
-			{
-				//Returns the NEXT parent node when indexing child array
-				parentIndex = 4*parentNode + i;
+			//Returns the NEXT parent node when indexing child array
+			parentIndex = 4*parentNode + lane;
 
-				childIndex  = child[parentIndex];
-				if (childIndex > 0)
-				{
-					//Advance down the tree and assign new parent node
-					parentNode = childIndex;
-					break;
-				}
+			childIndex  = child[parentIndex];
+			if (childIndex >= 0)
+			{
+				//Advance down the tree and assign new parent node
+				printf("TOP: Thread %d hit childIndex %d\n", idx, childIndex);
+				parentNode = childIndex;
 			}
 		}
 
@@ -947,10 +945,12 @@ __global__ void pack_filtered_data_kernel(float* xf, float* yf, float* scoref,
 			if(atomicCAS((int*)&child[parentIndex], childIndex, -1) == childIndex)
 			{
 				//This thread is the first here, so the childIndex goes with it
+				printf("\tThread %d will write to childIndex %d\n", idx, childIndex);
 				break;
 			} else
 			{
 				//This thread didn't get here fast enough, so it has to start over
+				printf("\tThread %d was too slow\n", idx);
 				notAtTop = false;
 				continue;
 			}
@@ -960,9 +960,9 @@ __global__ void pack_filtered_data_kernel(float* xf, float* yf, float* scoref,
 		notAtTop = false;	//assume all children are done
 		for (int i = 0; i< 4; i++)
 		{
-			int tmpIdx = 4*parentNode + 1;
+			int tmpIdx = 4*parentNode + i;
 			childIndex = child[tmpIdx];
-			if (childIndex > 0)
+			if (childIndex >= 0)
 			{
 				//Advance to next level down tree
 				notAtTop    = true;
@@ -976,22 +976,24 @@ __global__ void pack_filtered_data_kernel(float* xf, float* yf, float* scoref,
 		if (!notAtTop)
 		{
 			//It doesn't matter which thread gets here first
+			printf("\tThread %d is closing out parent [node, index]: [%d, %d]\n", idx, parentNode, parentIndex);
 			atomicExch((int*)&child[parentIndex], -1);
 		}
+		//Return if no more children
+		if (parentNode == n)
+			return;
 
 		//DEBUGGING
 		#ifdef DEBUG
-		if (iterations > 5*q)
+		if (iterations > q)
 		{
-			printf("Thread %d has gone around %d times. Breaking...\n", idx, iterations);
-			//dummy value to ensure no segfault
-			childIndex = 0;
-			break;
+			printf("Thread %d has gone around %d times. Returning...\n", idx, iterations);
+			return;
 		}
 		#endif
 	}
 
-	printf("thread %d writing out childIndex %d\n", idx, childIndex);
+	printf("BOTTOM: Thread %d writing out childIndex %d\n", idx, childIndex);
 
 	//Write out into packed array
 	xf[idx]     = x[childIndex];
