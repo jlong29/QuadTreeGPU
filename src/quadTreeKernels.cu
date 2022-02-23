@@ -353,12 +353,12 @@ __global__ void reset_filter_arrays_kernel(int* mutex, float* x, float* y, float
 	//Set bounds to image bounds
 	if(idx == 0)
 	{
-		*mutex = 0;
-		*index = n+1;	//Set to n + 1 to allow for root
-		*left = 0.0f;
-		*right = (float)w;
+		*mutex  = 0;
+		*index  = n+1;	//Set to n + 1 to allow for root
+		*left   = 0.0f;
+		*right  = (float)w;
 		*bottom = 0.0f;
-		*top = (float)h;
+		*top    = (float)h;
 		//set root coordinates
 		//Create a new cell, starting at index n
 		x[n]  = 0.5f*(float)w;
@@ -484,7 +484,7 @@ __global__ void build_tree_kernel(volatile float *x, volatile float *y, float* r
 			b = *bottom;
 			t = *top;
 
-			node      = 0;
+			node      = n;
 			childPath = 0;
 			posX      = x[idx];
 			posY      = y[idx];
@@ -613,7 +613,7 @@ __global__ void build_tree_kernel(volatile float *x, volatile float *y, float* r
 
 						//Set to value of child at this entry, which could be:
 						// -1 == break
-						// > n if both particles hit the same node, requiring further sub-division
+						// > n if new data landed in the same part of the sub-tree as old data
 						childIndex = child[4*node + childPath];
 					}
 
@@ -727,25 +727,30 @@ __global__ void filter_tree_kernel(volatile float* x, volatile float* y, volatil
 			childIndex = child[4*node + childPath];
 		}
 
+		printf("Thread %d at node %d is %d\n", idx, 4*node + childPath, childIndex);
 		//At this point childIndex: [-1 d]
 
 		// Check if child is already locked i.e. childIndex == -2
 		if(childIndex != -2){
 			//Acquire lock, which is only possible if child[locked]: [-1 d]
-			int locked = node*4 + childPath;
+			int locked = 4*node + childPath;
 			if(atomicCAS((int*)&child[locked], childIndex, -2) == childIndex){
 				//If unallocated, insert body and unlock
 				if(childIndex == -1){
 					// Insert body and release lock
 					child[locked] = idx;
+					printf("Initializing with %02d at [%f, %f]\n", idx, x[idx], y[idx]);
 				}
 				else{
 					//Sets max on number of cells
 					int patch = 4*n;
 					bool bMoreCells = true;
+
+					//for handling the case of new and old data landing in same node
+					int parentCell  = -1;
+					int tmpIdx;
 					while(childIndex >= 0)
 					{
-
 						// childIndex should always be -1, unallocated, or >=0, allocated
 
 						//Create a new cell, starting at index n
@@ -757,16 +762,34 @@ __global__ void filter_tree_kernel(volatile float* x, volatile float* y, volatil
 						//If f cells already created, filter by response
 						if (cell - n >= f)
 						{
-							printf("Cell is %d and f is %d\n", cell -n, f);
+							// printf("Cell is %d and f is %d\n", cell -n, f);
 
 							if (score[childIndex] < score[idx])
 							{
 								// Replace data and release lock
-								child[locked] = idx;
+								printf("\tSwapping %d with %d\n", childIndex, idx);
+								if (parentCell > 0)
+								{
+									child[tmpIdx] = idx;
+									__threadfence();
+									child[locked] = parentCell;
+								} else
+								{
+									child[locked] = idx;
+								}
 							} else
 							{
 								//... or put it back to unlock
-								child[locked] = childIndex;
+								printf("\tKeeping %d over %d\n", childIndex, idx);
+								if (parentCell > 0)
+								{
+									child[tmpIdx] = childIndex;
+									__threadfence();
+									child[locked] = parentCell;
+								} else
+								{
+									child[locked] = childIndex;
+								}
 							}
 							bMoreCells = false;
 							break;
@@ -805,7 +828,8 @@ __global__ void filter_tree_kernel(volatile float* x, volatile float* y, volatil
 						ry[cell-n] = 0.5*(t-b);
 
 						// insert new particle
-						node = cell;
+						parentCell = cell;
+						node       = cell;
 						childPath = 0;
 						if(posX < 0.5*(l+r)){
 							childPath += 1;
@@ -824,18 +848,21 @@ __global__ void filter_tree_kernel(volatile float* x, volatile float* y, volatil
 
 						//Set to value of child at this entry, which could be:
 						// -1 == break
-						// > n if a cell was created while this thread was locked
-						childIndex = child[4*node + childPath];
+						// > n if new data landed in the same part of the sub-tree as old data
+						tmpIdx     = 4*node + childPath;
+						childIndex = child[tmpIdx];
 					}
 
 					if (bMoreCells)
 					{
 						//This means childIndex is set to -1, unallocated, so allocated as body Index
+						printf("Initializing NEW with %02d at [%f, %f]\n", idx, x[idx], y[idx]);
 						child[4*node + childPath] = idx;
 
 						__threadfence();  // Ensures all writes to global memory are complete before lock is released
 
 						//Release lock and replace leaf with this cell
+						printf("Releasing lock as %d\n", patch);
 						child[locked] = patch;
 					}
 				}	// if(childIndex == -1): first assignment to body or not
@@ -849,6 +876,15 @@ __global__ void filter_tree_kernel(volatile float* x, volatile float* y, volatil
 
 		// Wait for threads in block to release locks to reduce memory pressure
 		__syncthreads(); // not needed for correctness
+	}
+
+	__syncthreads();
+	if (threadIdx.x + blockIdx.x*blockDim.x == 0)
+	{
+		for (int i = 0; i < 16; i++){
+			printf("%d, ", child[4*n+i]);
+		}
+		printf("\n");
 	}
 }
 

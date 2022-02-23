@@ -415,7 +415,7 @@ void cleanup()
 int runFilter()
 {
 	//Set random data
-	if (quadTree.resetData() < 0)
+	if (quadTree.resetFilterData() < 0)
 	{
 		return -1;
 	}
