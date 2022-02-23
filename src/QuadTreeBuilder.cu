@@ -72,7 +72,7 @@ QuadTreeBuilder::QuadTreeBuilder(int n, int w, int h, int d, int f):
 	{
 		//This a tight upperbound upon cells for a target set size of filtered data
 		numFilteredCells    = (int)ceil(((float)numFilteredData - 1.0f)/3.0f);
-		supNumFilteredCells = 3*numFilteredCells+1;
+		supNumFilteredData = 3*numFilteredCells+1;
 	}
 
 	//GPU Launch Configurations
@@ -150,7 +150,7 @@ int QuadTreeBuilder::allocate()
 	{
 		//This a tight upperbound upon cells for a target set size of filtered data
 		numFilteredCells    = (int)ceil(((float)numFilteredData - 1.0f)/3.0f);
-		supNumFilteredCells = 3*numFilteredCells+1;
+		supNumFilteredData = 3*numFilteredCells+1;
 	}
 
 	//GPU Launch Configurations
@@ -512,10 +512,10 @@ int QuadTreeBuilder::createFilterViz()
 	d_drawCellInnerEdges<<<blocksD, threads>>>(d_img, d_index, d_x, d_y, d_rx, d_ry, width, height, numData, numNodes);
 
 	//Write point last to avoid occulsion by lines (no alpha blending)
-	d_writeData2Image<<<blocks, threads>>>(d_img, d_x, d_y, width, height, numData);
+	d_writeData2Image<<<blocks, threads>>>(d_img, d_x, d_y, width, height, numTestData);
 	
-	blocksD = divUp(numFilteredData, threads);
-	d_writeFilter2Image<<<blocksD, threads>>>(d_img, d_xf, d_yf, width, height, numData);
+	blocksD = divUp(supNumFilteredData, threads);
+	d_writeFilter2Image<<<blocksD, threads>>>(d_img, d_xf, d_yf, width, height, supNumFilteredData);
 
 	checkCudaErrors(cudaEventRecord(stop, 0));
 	checkCudaErrors(cudaEventSynchronize(stop));

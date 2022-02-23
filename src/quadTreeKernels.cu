@@ -88,7 +88,9 @@ __global__ void d_writeFilter2Image(uchar4* dst, const float* __restrict filterX
 		int shotX = (int)filterX[i];
 		int shotY = (int)filterY[i];
 		if (in_img(shotX, shotY, w, h))
+		{
 			setBlueHue(255, dst[shotY*w + shotX]);
+		}
 	}
 }
 
@@ -753,7 +755,7 @@ __global__ void filter_tree_kernel(volatile float* x, volatile float* y, volatil
 						patch = min(patch, cell);
 
 						//If f cells already created, filter by response
-						if (cell - n > f)
+						if (cell - n >= f)
 						{
 							printf("Cell is %d and f is %d\n", cell -n, f);
 

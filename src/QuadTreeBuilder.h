@@ -25,7 +25,7 @@ class QuadTreeBuilder
 		int numTestData;		// <= numData
 		int numFilteredData;	// < numTestData
 		int numFilteredCells;	// <= numNodes
-		int supNumFilteredCells;// upperboard due to rounding
+		int supNumFilteredData;	// upperboard due to rounding
 
 		float* d_left;
 		float* d_right;
