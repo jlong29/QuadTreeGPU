@@ -7,7 +7,7 @@
 namespace quadTreeKernels
 {
 
-#define DEBUG
+// #define DEBUG
 
 // Image Processing //
 //Image bounds check
@@ -74,7 +74,13 @@ __global__ void d_writeData2Image(uchar4* dst, const float* __restrict noiseX, c
 		int shotX = (int)noiseX[i];
 		int shotY = (int)noiseY[i];
 		if (in_img(shotX, shotY, w, h))
+		{
+			//Mark 2x2 pixel region
 			setGreenHue(255, dst[shotY*w + shotX]);
+			setGreenHue(255, dst[shotY*w + shotX+1]);
+			setGreenHue(255, dst[(shotY+1)*w + shotX]);
+			setGreenHue(255, dst[(shotY+1)*w + shotX+1]);
+		}
 	}
 }
 
@@ -89,7 +95,11 @@ __global__ void d_writeFilter2Image(uchar4* dst, const float* __restrict filterX
 		int shotY = (int)filterY[i];
 		if (in_img(shotX, shotY, w, h))
 		{
+			//Mark 2x2 pixel region
 			setBlueHue(255, dst[shotY*w + shotX]);
+			setBlueHue(255, dst[shotY*w + shotX+1]);
+			setBlueHue(255, dst[(shotY+1)*w + shotX]);
+			setBlueHue(255, dst[(shotY+1)*w + shotX+1]);
 		}
 	}
 }
@@ -652,6 +662,15 @@ __global__ void filter_tree_kernel(volatile float* x, volatile float* y, volatil
 	f:		the maximum number of cells to be created, which limits data by single occupancy filter
 	*/
 
+	#ifdef DEBUG
+	if (d > 32)
+	{
+		//Don't brink your device with printf if running in DEBUG mode
+		printf("DEBUG mode has a max of 32 on the value of d\n");
+		return;
+	}
+	#endif
+
 	int idx    = threadIdx.x + blockIdx.x*blockDim.x;
 	int stride = blockDim.x*gridDim.x;
 
@@ -727,7 +746,6 @@ __global__ void filter_tree_kernel(volatile float* x, volatile float* y, volatil
 			childIndex = child[4*node + childPath];
 		}
 
-		printf("Thread %d at node %d is %d\n", idx, 4*node + childPath, childIndex);
 		//At this point childIndex: [-1 d]
 
 		// Check if child is already locked i.e. childIndex == -2
@@ -739,7 +757,9 @@ __global__ void filter_tree_kernel(volatile float* x, volatile float* y, volatil
 				if(childIndex == -1){
 					// Insert body and release lock
 					child[locked] = idx;
-					printf("Initializing with %02d at [%f, %f]\n", idx, x[idx], y[idx]);
+					#ifdef DEBUG
+						printf("Initializing with %02d at [%f, %f]\n", idx, x[idx], y[idx]);
+					#endif
 				}
 				else{
 					//Sets max on number of cells
@@ -762,18 +782,21 @@ __global__ void filter_tree_kernel(volatile float* x, volatile float* y, volatil
 						//If f cells already created, filter by response
 						if (cell - n >= f)
 						{
-							// printf("Cell is %d and f is %d\n", cell -n, f);
 							int keeper = idx;
 							if (score[childIndex] < score[idx])
 							{
 								// Replace data and release lock
-								printf("\tSwapping %d with %d\n", childIndex, idx);
 								keeper = idx;
+								#ifdef DEBUG
+									printf("\tSwapping %d with %d\n", childIndex, idx);
+								#endif
 							} else
 							{
 								//... or put it back to unlock
-								printf("\tKeeping %d over %d\n", childIndex, idx);
 								keeper = childIndex;
+								#ifdef DEBUG
+									printf("\tKeeping %d over %d\n", childIndex, idx);
+								#endif
 							}
 							//Check for the case of new and old data landing in same node
 							if (parentCell > 0)
@@ -851,14 +874,18 @@ __global__ void filter_tree_kernel(volatile float* x, volatile float* y, volatil
 					if (bMoreCells)
 					{
 						//This means childIndex is set to -1, unallocated, so allocated as body Index
-						printf("Initializing NEW with %02d at [%f, %f]\n", idx, x[idx], y[idx]);
 						child[4*node + childPath] = idx;
+						#ifdef DEBUG
+							printf("Initializing NEW with %02d at [%f, %f]\n", idx, x[idx], y[idx]);
+						#endif
 
 						__threadfence();  // Ensures all writes to global memory are complete before lock is released
 
 						//Release lock and replace leaf with this cell
-						printf("Releasing lock as %d\n", patch);
 						child[locked] = patch;
+						#ifdef DEBUG
+							printf("Releasing lock as %d\n", patch);
+						#endif
 					}
 				}	// if(childIndex == -1): first assignment to body or not
 
@@ -873,14 +900,16 @@ __global__ void filter_tree_kernel(volatile float* x, volatile float* y, volatil
 		__syncthreads(); // not needed for correctness
 	}
 
-	__syncthreads();
-	if (threadIdx.x + blockIdx.x*blockDim.x == 0)
-	{
-		for (int i = 0; i < 16; i++){
-			printf("%d, ", child[4*n+i]);
+	#ifdef DEBUG
+		__syncthreads();
+		if (threadIdx.x + blockIdx.x*blockDim.x == 0)
+		{
+			for (int i = 0; i < 16; i++){
+				printf("%d, ", child[4*n+i]);
+			}
+			printf("\n");
 		}
-		printf("\n");
-	}
+	#endif
 }
 
 __global__ void pack_filtered_data_kernel(float* xf, float* yf, float* scoref,
@@ -901,10 +930,23 @@ __global__ void pack_filtered_data_kernel(float* xf, float* yf, float* scoref,
 	q:		the number of filtered data
 	*/
 
+	#ifdef DEBUG
+	if (d > 32)
+	{
+		//Don't brink your device with printf if running in DEBUG mode
+		printf("DEBUG mode has a max of 32 on the value of d\n");
+		return;
+	}
+	#endif
+
 	int idx = threadIdx.x + blockIdx.x*blockDim.x;
 	if (idx >= q)
 		return;
 	int lane = threadIdx.x % 4;
+
+	//Shift indices beyond 4 to break up synchrony
+	int shift = threadIdx.x % 5;
+	int offsets[] = { 0, 1, 2, 3, 0, 1, 2, 3, 0 };
 
 	int parentIndex;
 	int parentNode;
@@ -933,8 +975,10 @@ __global__ void pack_filtered_data_kernel(float* xf, float* yf, float* scoref,
 			if (childIndex >= 0)
 			{
 				//Advance down the tree and assign new parent node
-				printf("TOP: Thread %d hit childIndex %d\n", idx, childIndex);
 				parentNode = childIndex;
+				#ifdef DEBUG
+					printf("TOP: Thread %d hit childIndex %d\n", idx, childIndex);
+				#endif
 			}
 		}
 
@@ -945,13 +989,17 @@ __global__ void pack_filtered_data_kernel(float* xf, float* yf, float* scoref,
 			if(atomicCAS((int*)&child[parentIndex], childIndex, -1) == childIndex)
 			{
 				//This thread is the first here, so the childIndex goes with it
-				printf("\tThread %d will write to childIndex %d\n", idx, childIndex);
+				#ifdef DEBUG
+					printf("\tThread %d will write to childIndex %d\n", idx, childIndex);
+				#endif
 				break;
 			} else
 			{
 				//This thread didn't get here fast enough, so it has to start over
-				printf("\tThread %d was too slow\n", idx);
 				notAtTop = false;
+				#ifdef DEBUG
+					printf("\tThread %d was too slow\n", idx);
+				#endif
 				continue;
 			}
 		}
@@ -960,7 +1008,9 @@ __global__ void pack_filtered_data_kernel(float* xf, float* yf, float* scoref,
 		notAtTop = false;	//assume all children are done
 		for (int i = 0; i< 4; i++)
 		{
-			int tmpIdx = 4*parentNode + i;
+			int chk = offsets[shift + i];
+
+			int tmpIdx = 4*parentNode + chk;
 			childIndex = child[tmpIdx];
 			if (childIndex >= 0)
 			{
@@ -976,24 +1026,39 @@ __global__ void pack_filtered_data_kernel(float* xf, float* yf, float* scoref,
 		if (!notAtTop)
 		{
 			//It doesn't matter which thread gets here first
-			printf("\tThread %d is closing out parent [node, index]: [%d, %d]\n", idx, parentNode, parentIndex);
 			atomicExch((int*)&child[parentIndex], -1);
+			#ifdef DEBUG
+				printf("\tThread %d is closing out parent [node, index]: [%d, %d]\n", idx, parentNode, parentIndex);
+			#endif
 		}
 		//Return if no more children
 		if (parentNode == n)
-			return;
-
-		//DEBUGGING
-		#ifdef DEBUG
-		if (iterations > q)
 		{
-			printf("Thread %d has gone around %d times. Returning...\n", idx, iterations);
+			#ifdef DEBUG
+				printf("Thread %d has found no children. Returning...\n", idx, iterations);
+			#endif
+			xf[idx]     = -1.0f;
+			yf[idx]     = -1.0f;
+			scoref[idx] = -1.0f;
 			return;
 		}
-		#endif
+
+		//DEBUGGING
+		if (iterations > q)
+		{
+			#ifdef DEBUG
+				printf("Thread %d has gone around %d times. Returning...\n", idx, iterations);
+			#endif
+			xf[idx]     = -1.0f;
+			yf[idx]     = -1.0f;
+			scoref[idx] = -1.0f;
+			return;
+		}
 	}
 
-	printf("BOTTOM: Thread %d writing out childIndex %d\n", idx, childIndex);
+	#ifdef DEBUG
+		printf("BOTTOM: Thread %d writing out childIndex %d\n", idx, childIndex);
+	#endif
 
 	//Write out into packed array
 	xf[idx]     = x[childIndex];

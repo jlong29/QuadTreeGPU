@@ -88,65 +88,65 @@ int main(int argc, char** argv)
 	W = 640;
 	H = 480;
 
-	// for (int i = 1; i < argc; ++i)
-	// {
-	// 	std::string arg = argv[i];
-	// 	if ((arg == "-i") || (arg == "--help"))
-	// 	{
-	// 		show_usage(argv[0]);
-	// 		return 0;  
-	// 	} else if (arg == "-n")
-	// 	{
-	// 		if (i + 1 < argc)
-	// 		{
-	// 			N = (size_t)atoi(argv[++i]);
-	// 		} else
-	// 		{
-	// 			fprintf(stderr, "-n option requires one argument indicating a sample size.\n");
-	// 			return -1;
-	// 		}
-	// 	} else if (arg == "-d")
-	// 	{
-	// 		if (i + 1 < argc)
-	// 		{
-	// 			D = (size_t)atoi(argv[++i]);
-	// 		} else
-	// 		{
-	// 			fprintf(stderr, "-n option requires one argument indicating a sample size.\n");
-	// 			return -1;
-	// 		}
-	// 	} else if (arg == "-f")
-	// 	{
-	// 		if (i + 1 < argc)
-	// 		{
-	// 			F = (size_t)atoi(argv[++i]);
-	// 		} else
-	// 		{
-	// 			fprintf(stderr, "-n option requires one argument indicating a sample size.\n");
-	// 			return -1;
-	// 		}
-	// 	} else if (arg == "-w")
-	// 	{
-	// 		if (i + 1 < argc)
-	// 		{
-	// 			W = (size_t)atoi(argv[++i]);
-	// 		} else
-	// 		{
-	// 			fprintf(stderr, "-w option requires one argument indicating an image width.\n");
-	// 			return -1;
-	// 		}
-	// 	} else if (arg == "-h")
-	// 	{
-	// 		if (i + 1 < argc)
-	// 		{
-	// 			H = (size_t)atoi(argv[++i]);
-	// 		} else
-	// 		{
-	// 			fprintf(stderr, "-h option requires one argument indicating an image height\n");
-	// 			return -1;
-	// 		}
-	// 	}
-	// }
+	for (int i = 1; i < argc; ++i)
+	{
+		std::string arg = argv[i];
+		if ((arg == "-i") || (arg == "--help"))
+		{
+			show_usage(argv[0]);
+			return 0;  
+		} else if (arg == "-n")
+		{
+			if (i + 1 < argc)
+			{
+				N = (size_t)atoi(argv[++i]);
+			} else
+			{
+				fprintf(stderr, "-n option requires one argument indicating a sample size.\n");
+				return -1;
+			}
+		} else if (arg == "-d")
+		{
+			if (i + 1 < argc)
+			{
+				D = (size_t)atoi(argv[++i]);
+			} else
+			{
+				fprintf(stderr, "-n option requires one argument indicating a sample size.\n");
+				return -1;
+			}
+		} else if (arg == "-f")
+		{
+			if (i + 1 < argc)
+			{
+				F = (size_t)atoi(argv[++i]);
+			} else
+			{
+				fprintf(stderr, "-n option requires one argument indicating a sample size.\n");
+				return -1;
+			}
+		} else if (arg == "-w")
+		{
+			if (i + 1 < argc)
+			{
+				W = (size_t)atoi(argv[++i]);
+			} else
+			{
+				fprintf(stderr, "-w option requires one argument indicating an image width.\n");
+				return -1;
+			}
+		} else if (arg == "-h")
+		{
+			if (i + 1 < argc)
+			{
+				H = (size_t)atoi(argv[++i]);
+			} else
+			{
+				fprintf(stderr, "-h option requires one argument indicating an image height\n");
+				return -1;
+			}
+		}
+	}
 
 	//Check input constraints
 	if (N < D)

@@ -438,7 +438,7 @@ int QuadTreeBuilder::filter()
 		fprintf(stderr, "QuadTreeBuilder::filter(): d must be <= numData\n");
 	}
 
-	checkCudaErrors(cudaEventRecord(start,0));
+	// checkCudaErrors(cudaEventRecord(start,0));
 
 	if ((width < 0) || (height < 0))
 	{
@@ -449,13 +449,13 @@ int QuadTreeBuilder::filter()
 		ResetFilterArrays(numFilteredData, width, height);
 	}
 	FilterQuadTree(numTestData, numFilteredData, numFilteredCells);
-	cudaDeviceSynchronize();
-	getLastCudaError("FilterQuadTree");
+	// cudaDeviceSynchronize();
+	// getLastCudaError("FilterQuadTree");
 
-	checkCudaErrors(cudaEventRecord(stop,0));
-	checkCudaErrors(cudaEventSynchronize(stop));
-	checkCudaErrors(cudaEventElapsedTime(&elpsTime, start, stop));
-	printf("\n\nElapsed time for QuadTree Filter:  %9.6f ms \n", elpsTime);
+	// checkCudaErrors(cudaEventRecord(stop,0));
+	// checkCudaErrors(cudaEventSynchronize(stop));
+	// checkCudaErrors(cudaEventElapsedTime(&elpsTime, start, stop));
+	// printf("\n\nElapsed time for QuadTree Filter:  %9.6f ms \n", elpsTime);
 
 	return 0;
 }
@@ -636,6 +636,25 @@ void QuadTreeBuilder::BuildQuadTree()
 //Filter with quad tree
 void QuadTreeBuilder::FilterQuadTree(const int d, const int q, const int f)
 {
+	checkCudaErrors(cudaEventRecord(start,0));
+
 	filter_tree_kernel<<<blocks, threads>>>(d_x, d_y, d_score, d_rx, d_ry, d_child, d_index, d_left, d_right, d_bottom, d_top, numData, numNodes, d, f);
+	cudaDeviceSynchronize();
+	getLastCudaError("FilterQuadTree");
+
+	checkCudaErrors(cudaEventRecord(stop,0));
+	checkCudaErrors(cudaEventSynchronize(stop));
+	checkCudaErrors(cudaEventElapsedTime(&elpsTime, start, stop));
+	printf("\n\nElapsed time for QuadTree Filter:  %9.6f ms \n", elpsTime);
+
+	checkCudaErrors(cudaEventRecord(start,0));
+
 	pack_filtered_data_kernel<<<blocks, threads>>>(d_xf, d_yf, d_scoref, d_x, d_y, d_score, d_child, numData, d, q);
+	cudaDeviceSynchronize();
+	getLastCudaError("FilterTreePack");
+
+	checkCudaErrors(cudaEventRecord(stop,0));
+	checkCudaErrors(cudaEventSynchronize(stop));
+	checkCudaErrors(cudaEventElapsedTime(&elpsTime, start, stop));
+	printf("\n\nElapsed time for QuadTree Pack:  %9.6f ms \n", elpsTime);
 }
