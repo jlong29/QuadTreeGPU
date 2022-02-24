@@ -204,41 +204,8 @@ __global__ void generate_uniform2Dfilter_kernel(float* noiseX, float* noiseY, fl
 }
 
 // Quad Tree Routines //
-__global__ void reset_arrays_kernel(int* mutex, float* x, float* y, float* rx, float* ry, int* child, int* index, float* left, float* right, float* bottom, float* top, int n, int m)
-{
-	int idx = threadIdx.x + blockDim.x*blockIdx.x;
-	int stride = blockDim.x*gridDim.x;
-	int offset = 0;
-
-	// reset quadtree arrays
-	while(idx + offset < m)
-	{  
-#pragma unroll 4
-		for(int i=0;i<4;i++)
-		{
-			child[(idx + offset)*4 + i] = -1;
-		}
-		if(idx + offset >= n)
-		{
-			x[idx + offset] = CUDART_NAN_F;
-			y[idx + offset] = CUDART_NAN_F;
-			rx[idx + offset - n] = CUDART_NAN_F;
-			ry[idx + offset - n] = CUDART_NAN_F;
-		}
-		offset += stride;
-	}
-
-	if(idx == 0)
-	{
-		*mutex = 0;
-		*index = n;
-		*left = CUDART_INF_F;
-		*right = -CUDART_INF_F;
-		*bottom = CUDART_INF_F;
-		*top = -CUDART_INF_F;
-	}
-}
-__global__ void reset_arrays_kernel(int* mutex, float* x, float* y, float* rx, float* ry, int* child, int* index, float* left, float* right, float* bottom, float* top, const int w, const int h, int n, int m)
+__global__ void reset_arrays_kernel(int* mutex, float* x, float* y, float* rx, float* ry, int* child, int* index,
+										float* left, float* right, float* bottom, float* top, const int w, const int h, int n, int m)
 {
 	int idx = threadIdx.x + blockDim.x*blockIdx.x;
 	int stride = blockDim.x*gridDim.x;
@@ -282,10 +249,10 @@ __global__ void reset_arrays_kernel(int* mutex, float* x, float* y, float* rx, f
 		ry[0] = 0.5f*(float)h;
 	}
 }
- 
+
 __global__ void reset_filter_arrays_kernel(int* mutex, float* x, float* y, float* score, float* xf, float* yf, float* scoref,
 											float* rx, float* ry, int* child, int* index, float* left, float* right, float* bottom, float* top,
-											const int f, int n, int m)
+											const int q, const int w, const int h, int n, int m)
 {
 	int idx = threadIdx.x + blockDim.x*blockIdx.x;
 	int stride = blockDim.x*gridDim.x;
@@ -299,51 +266,7 @@ __global__ void reset_filter_arrays_kernel(int* mutex, float* x, float* y, float
 		{
 			child[(idx + offset)*4 + i] = -1;
 		}
-		if (idx + offset < f)
-		{
-			xf[idx + offset] = CUDART_NAN_F;
-			yf[idx + offset] = CUDART_NAN_F;
-			scoref[idx + offset]  = CUDART_NAN_F;
-		}
-		if(idx + offset >= n)
-		{
-			x[idx + offset] = CUDART_NAN_F;
-			y[idx + offset] = CUDART_NAN_F;
-			score[idx + offset]  = CUDART_NAN_F;
-			rx[idx + offset - n] = CUDART_NAN_F;
-			ry[idx + offset - n] = CUDART_NAN_F;
-		}
-		offset += stride;
-	}
-
-	if(idx == 0)
-	{
-		*mutex = 0;
-		*index = n;
-		*left = CUDART_INF_F;
-		*right = -CUDART_INF_F;
-		*bottom = CUDART_INF_F;
-		*top = -CUDART_INF_F;
-	}
-}
-
-__global__ void reset_filter_arrays_kernel(int* mutex, float* x, float* y, float* score, float* xf, float* yf, float* scoref,
-											float* rx, float* ry, int* child, int* index, float* left, float* right, float* bottom, float* top,
-											const int f, const int w, const int h, int n, int m)
-{
-	int idx = threadIdx.x + blockDim.x*blockIdx.x;
-	int stride = blockDim.x*gridDim.x;
-	int offset = 0;
-
-	// reset quadtree arrays
-	while(idx + offset < m)
-	{  
-#pragma unroll 4
-		for(int i=0;i<4;i++)
-		{
-			child[(idx + offset)*4 + i] = -1;
-		}
-		if (idx + offset < f)
+		if (idx + offset < q)
 		{
 			xf[idx + offset] = CUDART_NAN_F;
 			yf[idx + offset] = CUDART_NAN_F;
@@ -379,88 +302,6 @@ __global__ void reset_filter_arrays_kernel(int* mutex, float* x, float* y, float
 		ry[0] = 0.5f*(float)h;
 	}
 }
-
-__global__ void compute_bounding_box_kernel(int* mutex, int* index, float* x, float* y, float* rx, float* ry, volatile float* left, volatile float* right, volatile float* bottom, volatile float* top, int n)
-{
-	//TODO: optimize using warps
-
-	int idx     = threadIdx.x + blockDim.x*blockIdx.x;
-	int stride  = blockDim.x*gridDim.x;
-	float x_min = x[idx];
-	float x_max = x[idx];
-	float y_min = y[idx];
-	float y_max = y[idx];
-	
-	__shared__ float left_cache[NTHREADS];
-	__shared__ float right_cache[NTHREADS];
-	__shared__ float bottom_cache[NTHREADS];
-	__shared__ float top_cache[NTHREADS];
-
-
-	int offset = stride;
-	while(idx + offset < n){
-		x_min = fminf(x_min, x[idx + offset]);
-		x_max = fmaxf(x_max, x[idx + offset]);
-		y_min = fminf(y_min, y[idx + offset]);
-		y_max = fmaxf(y_max, y[idx + offset]);
-		offset += stride;
-	}
-
-	left_cache[threadIdx.x] = x_min;
-	right_cache[threadIdx.x] = x_max;
-	bottom_cache[threadIdx.x] = y_min;
-	top_cache[threadIdx.x] = y_max;
-
-	__syncthreads();
-
-	//////////////////////////
-	// BLOCK-WISE REDUCTION //
-	//////////////////////////
-
-	// NOTE: This could be done by warps
-
-	// assumes blockDim.x is a power of 2!
-	int i = blockDim.x/2;
-	while(i != 0){
-		if(threadIdx.x < i){
-			left_cache[threadIdx.x]   = fminf(left_cache[threadIdx.x], left_cache[threadIdx.x + i]);
-			right_cache[threadIdx.x]  = fmaxf(right_cache[threadIdx.x], right_cache[threadIdx.x + i]);
-			bottom_cache[threadIdx.x] = fminf(bottom_cache[threadIdx.x], bottom_cache[threadIdx.x + i]);
-			top_cache[threadIdx.x]    = fmaxf(top_cache[threadIdx.x], top_cache[threadIdx.x + i]);
-		}
-		__syncthreads();
-		i /= 2;
-	}
-
-	/////////////////////
-	// FINAL REDUCTION //
-	/////////////////////
-
-	//NOTE: threadIdx.x == 0 in each block performs final reduction using atomics
-
-	// How the lock works
-	// -If a thread has the lock, the mutex will be 1, and the thread loops (spin lock)
-	// -If a thread does not have the lock, it takes the lock and is done
-
-	//TODO: Optimize using registers
-	if(threadIdx.x == 0){
-		while (atomicCAS(mutex, 0 ,1) != 0); // lock
-		*left   = fminf(*left, left_cache[0]);
-		*right  = fmaxf(*right, right_cache[0]);
-		*bottom = fminf(*bottom, bottom_cache[0]);
-		*top    = fmaxf(*top, top_cache[0]);
-		//set root coordinates
-		__threadfence();
-		//Create a new cell, starting at idx n
-		int cell   = atomicAdd(index,1);
-		x[cell]    = 0.5f*(*left + *right);
-		y[cell]    = 0.5f*(*top + *bottom);
-		rx[cell-n] = 0.5f*(*left - *right);
-		ry[cell-n] = 0.5f*(*top - *bottom);
-		atomicExch(mutex, 0); // unlock
-	}
-}
-
 
 __global__ void build_tree_kernel(volatile float *x, volatile float *y, float* rx, float* ry, volatile int *child, int *index,
 									const float *left, const float *right, const float *bottom, const float *top,

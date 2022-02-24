@@ -27,7 +27,7 @@ static bool bReset = false;
 //Problem Size
 //Parameters
 int D;
-int F;
+int Q;
 int N;
 int W;
 int H;
@@ -71,7 +71,7 @@ static void show_usage(std::string name)
 			  << "\t-i,--help\tShow this help message\n"
 			  << "\t-n,\t\tset the number of data points to generate\n"
 			  << "\t-d,\t\tset the number of data points to generate then filtered\n"
-			  << "\t-f,\t\tset the number of filtered data points to generate\n"
+			  << "\t-q,\t\tset the number of filtered data points to generate\n"
 			  << "\t-w,\t\tset the width of the image plane\n"
 			  << "\t-h,\t\tset the height of the image plane\n"
 			  << std::endl;
@@ -83,7 +83,7 @@ int main(int argc, char** argv)
 {
 	//Input Parameters
 	D = 16;
-	F = D/2;
+	Q = D/2;
 	N = 2*D;
 	W = 640;
 	H = 480;
@@ -115,11 +115,11 @@ int main(int argc, char** argv)
 				fprintf(stderr, "-n option requires one argument indicating a sample size.\n");
 				return -1;
 			}
-		} else if (arg == "-f")
+		} else if (arg == "-q")
 		{
 			if (i + 1 < argc)
 			{
-				F = (size_t)atoi(argv[++i]);
+				Q = (size_t)atoi(argv[++i]);
 			} else
 			{
 				fprintf(stderr, "-n option requires one argument indicating a sample size.\n");
@@ -154,7 +154,7 @@ int main(int argc, char** argv)
 		N = 2*D;
 		fprintf(stdout, "Setting N to 2*D because inputs had N < D\n");
 	}
-	if (F >= D)
+	if (Q >= D)
 	{
 		fprintf(stderr, "The number of filtered data points must be less than the number of generated data points\n");
 		show_usage(argv[0]);
@@ -166,7 +166,7 @@ int main(int argc, char** argv)
 	window_height = H;
 
 	//Set QuadTreeBuilder parameters
-	quadTree.setParameters(N, W, H, D, F);
+	quadTree.setParameters(N, W, H, D, Q);
 
 	//initialize timers
 	fpsCount   = 0;
@@ -449,7 +449,7 @@ int runFilter()
 	printf("\n");
 
 	printf("Printing out 2D FILTERED Noise:\n\t");
-	for (int ii = 0; ii < min(100, F); ii++)
+	for (int ii = 0; ii < min(100, Q); ii++)
 	{
 		printf("[%d, %d], ", (int)quadTree.h_xf[ii], (int)quadTree.h_yf[ii]);
 	}

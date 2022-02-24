@@ -33,17 +33,12 @@ __global__ void generate_uniform2D_kernel(float* noiseX, float* noiseY, int seed
 __global__ void generate_uniform2Dfilter_kernel(float* noiseX, float* noiseY, float* score, int seed, const int w, const int h, const int n);
 
 // Quad Tree Routines //
-__global__ void reset_arrays_kernel(int* mutex, float* x, float* y, float* rx, float* ry, int* child, int* index, float* left, float* right, float* bottom, float* top, int n, int m);
-__global__ void reset_arrays_kernel(int* mutex, float* x, float* y, float* rx, float* ry, int* child, int* index, float* left, float* right, float* bottom, float* top, const int w, const int h, int n, int m);
+__global__ void reset_arrays_kernel(int* mutex, float* x, float* y, float* rx, float* ry, int* child, int* index,
+											float* left, float* right, float* bottom, float* top, const int w, const int h, int n, int m);
 
 __global__ void reset_filter_arrays_kernel(int* mutex, float* x, float* y, float* score, float* xf, float* yf, float* scoref,
 											float* rx, float* ry, int* child, int* index, float* left, float* right, float* bottom, float* top,
-											const int f, int n, int m);
-__global__ void reset_filter_arrays_kernel(int* mutex, float* x, float* y, float* score, float* xf, float* yf, float* scoref,
-											float* rx, float* ry, int* child, int* index, float* left, float* right, float* bottom, float* top,
-											const int f, const int w, const int h, int n, int m);
-
-__global__ void compute_bounding_box_kernel(int *mutex, int* index, float *x, float *y, float* rx, float* ry, volatile float *left, volatile float *right, volatile float *bottom, volatile float* top, int n);
+											const int q, const int w, const int h, int n, int m);
 
 __global__ void build_tree_kernel(volatile float* x, volatile float* y, float* rx, float* ry, volatile int* child, int* index,
 									const float* left, const float* right, const float* bottom, const float* top,
