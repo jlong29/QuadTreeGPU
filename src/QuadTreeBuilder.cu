@@ -449,6 +449,11 @@ int QuadTreeBuilder::filter(float* x, float* y, float* score, unsigned int* d, c
 	return 0;
 }
 
+//Operates upon internal state and external device data intput
+int QuadTreeBuilder::filter(unsigned int* d)
+{
+	return filter(d_x, d_y, d_score, d, numFilteredData);
+}
 //Write visualization
 int QuadTreeBuilder::createBuildViz()
 {

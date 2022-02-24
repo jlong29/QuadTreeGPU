@@ -90,6 +90,8 @@ class QuadTreeBuilder
 		int filter();
 		//Takes in device side counter
 		int filter(float* x, float* y, float* score, unsigned int* d, const int q);
+		//Operates upon internal state and external device data intput
+		int filter(unsigned int* d);
 
 		//Create build visualization
 		int createBuildViz();
