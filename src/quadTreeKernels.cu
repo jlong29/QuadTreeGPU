@@ -976,6 +976,24 @@ __global__ void pack_filtered_data_kernel(float* xf, float* yf, float* scoref,
 			childIndex  = child[parentIndex];
 			if (childIndex >= 0)
 			{
+				//Leaf check
+				if ((childIndex < d) && (childIndex >=0))
+				{
+					//We're at a leaf, so set to unallocated = -1
+					if(atomicCAS((int*)&child[parentIndex], childIndex, -1) == childIndex)
+					{
+						//This thread is the first here, so the childIndex goes with it
+						#ifdef PACKDEBUG
+							printf("\tThread %d will write to childIndex %d\n", idx, childIndex);
+						#endif
+						break;
+					} else
+					{
+						#ifdef PACKDEBUG
+							printf("\tThread %d was too slow\n", idx);
+						#endif
+					}
+				}
 				//Advance down the tree and assign new parent node
 				parentNode = childIndex;
 				#ifdef PACKDEBUG
@@ -984,30 +1002,9 @@ __global__ void pack_filtered_data_kernel(float* xf, float* yf, float* scoref,
 			}
 		}
 
-		//Leaf check
-		if ((childIndex < d) && (childIndex >=0))
-		{
-			//We're at a leaf, so set to unallocated = -1
-			if(atomicCAS((int*)&child[parentIndex], childIndex, -1) == childIndex)
-			{
-				//This thread is the first here, so the childIndex goes with it
-				#ifdef PACKDEBUG
-					printf("\tThread %d will write to childIndex %d\n", idx, childIndex);
-				#endif
-				break;
-			} else
-			{
-				//This thread didn't get here fast enough, so it has to start over
-				notAtTop = false;
-				#ifdef PACKDEBUG
-					printf("\tThread %d was too slow\n", idx);
-				#endif
-				continue;
-			}
-		}
-
 		//Inspect children of this parent cell
-		notAtTop = false;	//assume all children are done
+		notAtTop         = false;	//assume all children are done
+		bool writeOutput = false;
 		for (int i = 0; i< 4; i++)
 		{
 			int chk = offsets[shift + i];
@@ -1016,13 +1013,37 @@ __global__ void pack_filtered_data_kernel(float* xf, float* yf, float* scoref,
 			childIndex = child[tmpIdx];
 			if (childIndex >= 0)
 			{
-				//Advance to next level down tree
-				notAtTop    = true;
-				parentIndex = tmpIdx;
-				parentNode  = childIndex;
-				break;
+				//Leaf check
+				if ((childIndex < d) && (childIndex >=0))
+				{
+					//We're at a leaf, so set to unallocated = -1
+					if(atomicCAS((int*)&child[tmpIdx], childIndex, -1) == childIndex)
+					{
+						//This thread is the first here, so the childIndex goes with it
+						writeOutput = true;
+						#ifdef PACKDEBUG
+							printf("\tThread %d will write to NEW childIndex %d\n", idx, childIndex);
+						#endif
+						break;
+					} else
+					{
+						#ifdef PACKDEBUG
+							printf("\tThread %d was too slow\n", idx);
+						#endif
+						continue;
+					}
+				} else
+				{
+					//Advance to next level down tree
+					notAtTop    = true;
+					parentIndex = tmpIdx;
+					parentNode  = childIndex;
+					break;
+				}
 			}
 		}
+		if (writeOutput)
+			break;
 
 		//If all children are done, then mark parent as done and go back to the top
 		if (!notAtTop)
