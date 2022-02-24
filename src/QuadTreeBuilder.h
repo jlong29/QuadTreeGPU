@@ -84,12 +84,12 @@ class QuadTreeBuilder
 		int build();
 
 		//filter the data from m > n points to n points according to highest score
-		//Takes in device side counter
-		// int filter(float* x, float* y, float* score, unsigned int* d, const int q);
 		//Takes in host side counter
 		int filter(float* x, float* y, float* score, const int d, const int q);
 		//Operates upon internal state
 		int filter();
+		//Takes in device side counter
+		int filter(float* x, float* y, float* score, unsigned int* d, const int q);
 
 		//Create build visualization
 		int createBuildViz();
@@ -113,6 +113,7 @@ class QuadTreeBuilder
 		void ResetFilterArrays(const int q, const int w, const int h);
 		void BuildQuadTree();
 		void FilterQuadTree(const int d, const int q, const int f);
+		void FilterQuadTreeDev(unsigned int* d, const int q, const int f);
 
 		static inline int divUp(int x, int y)
 		{

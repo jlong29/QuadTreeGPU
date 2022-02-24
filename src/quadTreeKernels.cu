@@ -755,6 +755,279 @@ __global__ void filter_tree_kernel(volatile float* x, volatile float* y, volatil
 	#endif
 }
 
+__global__ void filter_treeDev_kernel(volatile float* x, volatile float* y, volatile float* score,
+									float* rx, float* ry, volatile int* child, int* index,
+									const float* left, const float* right, const float* bottom, const float* top,
+									const int n, const int m, unsigned int* pd, const int f)
+{
+	/*
+	This routine combines building the Quad Tree with spatial filtering and summarizing internal node information
+	index:	a global index start at n
+	n:		the number of possible data
+	m:		the number of possible nodes
+	d:		the number of current data
+	f:		the maximum number of cells to be created, which limits data by single occupancy filter
+	*/
+
+	//Read d into shared memory and broadcast
+	static __shared__ int shared[1];
+	if (threadIdx.x == 0)
+		shared[0] = (int)(*pd);
+	__syncthreads();
+
+	//Write to local register
+	int d = shared[0];
+
+	#ifdef FILTERDEBUG
+	if (d > 32)
+	{
+		//Don't break your device with printf if running in FILTERDEBUG mode
+		printf("FILTERDEBUG mode has a max of 32 on the value of d\n");
+		return;
+	}
+	#endif
+
+	int idx    = threadIdx.x + blockIdx.x*blockDim.x;
+	int stride = blockDim.x*gridDim.x;
+
+	// build quadtree
+	float l;
+	float r;
+	float b;
+	float t;
+	int childPath;
+	int node;
+
+	bool newBody  = true;
+	float posX, posY;
+	while(idx < d){
+
+		if(newBody){
+			newBody = false;
+			//Top/Down Traversal: All particles start in one of the top 4 quads
+			l = *left;
+			r = *right;
+			b = *bottom;
+			t = *top;
+
+			node      = n;
+			childPath = 0;
+			posX      = x[idx];
+			posY      = y[idx];
+
+			//Check body location within the top 4 nodes
+			if(posX < 0.5f*(l+r)){
+				childPath += 1;
+				r = 0.5f*(l+r);
+			}
+			else{
+				l = 0.5f*(l+r);
+			}
+			if(posY < 0.5f*(b+t)){
+				childPath += 2;
+				t = 0.5f*(t+b);
+			}
+			else{
+				b = 0.5f*(t+b);
+			}
+		}
+
+		//Set childIndex, which could be after mutliple loops
+		int childIndex = child[node*4 + childPath];
+
+		// traverse tree until we hit leaf node (could be allocated or not)
+
+		//NOTE: childIndex >= d means we are in a cell not a leaf
+		// You could also land in an unallocated (-1) or locked (-2) node
+		while(childIndex >= d){
+			//Check body location within the 4 quads of this node
+			node = childIndex;
+			childPath = 0;
+			if(posX < 0.5f*(l+r)){
+				childPath += 1;
+				r = 0.5f*(l+r);
+			}
+			else{
+				l = 0.5f*(l+r);
+			}
+			if(posY < 0.5f*(b+t)){
+				childPath += 2;
+				t = 0.5f*(t+b);
+			}
+			else{
+				b = 0.5f*(t+b);
+			}
+
+			//Advance to child of this cell
+			childIndex = child[4*node + childPath];
+		}
+
+		//At this point childIndex: [-1 d]
+
+		// Check if child is already locked i.e. childIndex == -2
+		if(childIndex != -2){
+			//Acquire lock, which is only possible if child[locked]: [-1 d]
+			int locked = 4*node + childPath;
+			if(atomicCAS((int*)&child[locked], childIndex, -2) == childIndex){
+				//If unallocated, insert body and unlock
+				if(childIndex == -1){
+					// Insert body and release lock
+					child[locked] = idx;
+					#ifdef FILTERDEBUG
+						printf("Initializing with %02d at [%f, %f]\n", idx, x[idx], y[idx]);
+					#endif
+				}
+				else{
+					//Sets max on number of cells
+					int patch = 4*n;
+					bool bMoreCells = true;
+
+					//for handling the case of new and old data landing in same node
+					int parentCell  = -1;
+					int tmpIdx;
+					while(childIndex >= 0)
+					{
+						// childIndex should always be -1, unallocated, or >=0, allocated
+
+						//Create a new cell, starting at index n
+						int cell = atomicAdd(index,1);
+
+						//Compare against maximum allowable cells
+						patch = min(patch, cell);
+
+						//If f cells already created, filter by response
+						if (cell - n >= f)
+						{
+							int keeper = idx;
+							if (score[childIndex] < score[idx])
+							{
+								// Replace data and release lock
+								keeper = idx;
+								#ifdef FILTERDEBUG
+									printf("\tSwapping %d with %d\n", childIndex, idx);
+								#endif
+							} else
+							{
+								//... or put it back to unlock
+								keeper = childIndex;
+								#ifdef FILTERDEBUG
+									printf("\tKeeping %d over %d\n", childIndex, idx);
+								#endif
+							}
+							//Check for the case of new and old data landing in same node
+							if (parentCell > 0)
+							{
+								child[tmpIdx] = keeper;
+								__threadfence();
+								child[locked] = parentCell;
+							} else
+							{
+								child[locked] = keeper;
+							}
+
+							bMoreCells = false;
+							break;
+						}
+
+						//If the maximum number of cells have been reached:
+						// It prunes away the node above
+						if(patch != cell){
+							child[4*node + childPath] = cell;
+						}
+
+						// insert old particle into new cell
+						childPath = 0;
+						if(x[childIndex] < 0.5f*(l+r)){
+							childPath += 1;
+						}
+						if(y[childIndex] < 0.5f*(b+t)){
+							childPath += 2;
+						}
+
+						#ifdef FILTERDEBUG
+							// if(cell >= 2*n){
+							if(cell >= m){
+								printf("%s\n", "error cell index is too large!!");
+								printf("cell: %d\n", cell);
+							}
+						#endif
+
+						//Assign old particle to subtree leaf
+						child[4*cell + childPath] = childIndex;
+
+						//SET ROOT OF NEW CELL AND LENGTH OF SIDES
+						x[cell]    = 0.5*(l+r);
+						y[cell]    = 0.5*(b+t);
+						rx[cell-n] = 0.5*(r-l);
+						ry[cell-n] = 0.5*(t-b);
+
+						// insert new particle
+						parentCell = cell;
+						node       = cell;
+						childPath = 0;
+						if(posX < 0.5f*(l+r)){
+							childPath += 1;
+							r = 0.5f*(l+r);
+						}
+						else{
+							l = 0.5f*(l+r);
+						}
+						if(posY < 0.5f*(b+t)){
+							childPath += 2;
+							t = 0.5f*(t+b);
+						}
+						else{
+							b = 0.5f*(t+b);
+						}
+
+						//Set to value of child at this entry, which could be:
+						// -1 == break
+						// > n if new data landed in the same part of the sub-tree as old data
+						tmpIdx     = 4*node + childPath;
+						childIndex = child[tmpIdx];
+					}
+
+					if (bMoreCells)
+					{
+						//This means childIndex is set to -1, unallocated, so allocated as body Index
+						child[4*node + childPath] = idx;
+						#ifdef FILTERDEBUG
+							printf("Initializing NEW with %02d at [%f, %f]\n", idx, x[idx], y[idx]);
+						#endif
+
+						__threadfence();  // Ensures all writes to global memory are complete before lock is released
+
+						//Release lock and replace leaf with this cell
+						child[locked] = patch;
+						#ifdef FILTERDEBUG
+							printf("Releasing lock as %d\n", patch);
+						#endif
+					}
+				}	// if(childIndex == -1): first assignment to body or not
+
+				//Advance to next body
+				idx += stride;
+				newBody    = true;
+			}	//if(atomicCAS((int*)&child[locked], childIndex, -2) == childIndex)
+
+		}	//if(childIndex != -2): locked already or not. If locked, go around again
+
+		// Wait for threads in block to release locks to reduce memory pressure
+		__syncthreads(); // not needed for correctness
+	}
+
+	#ifdef FILTERDEBUG
+		__syncthreads();
+		if (threadIdx.x + blockIdx.x*blockDim.x == 0)
+		{
+			for (int i = 0; i < 16; i++){
+				printf("%d, ", child[4*n+i]);
+			}
+			printf("\n");
+		}
+	#endif
+}
+
 __global__ void pack_filtered_data_kernel(float* xf, float* yf, float* scoref,
 											float* x, float* y, float* score,
 											int* child, const int n, const int d, const int q)
@@ -772,6 +1045,190 @@ __global__ void pack_filtered_data_kernel(float* xf, float* yf, float* scoref,
 	d:		the number of current data
 	q:		the number of filtered data
 	*/
+
+	#ifdef PACKDEBUG
+	if (d > 32)
+	{
+		//Don't break your device with printf if running in PACKDEBUG mode
+		printf("PACKDEBUG mode has a max of 32 on the value of d\n");
+		return;
+	}
+	#endif
+
+	int idx = threadIdx.x + blockIdx.x*blockDim.x;
+	if (idx >= q)
+		return;
+	int lane = threadIdx.x % 4;
+
+	//Shift indices beyond 4 to break up synchrony
+	int shift = threadIdx.x % 5;
+	int offsets[] = { 0, 1, 2, 3, 0, 1, 2, 3, 0 };
+
+	int parentIndex;
+	int parentNode;
+
+	//Every thread will hit a leaf
+	int  childIndex;
+	bool notAtTop = false;
+
+	int iterations = 0;
+	while(true)
+	{
+		iterations++;
+
+		//Start at the top of the tree
+		if (!notAtTop)
+		{
+			//Start at Root Node
+			parentNode = n;
+
+			//Inspect children of root for initial parentIndex
+			// - At least one of them should always be active
+			//Returns the NEXT parent node when indexing child array
+			parentIndex = 4*parentNode + lane;
+
+			childIndex  = child[parentIndex];
+			if (childIndex >= 0)
+			{
+				//Leaf check
+				if ((childIndex < d) && (childIndex >=0))
+				{
+					//We're at a leaf, so set to unallocated = -1
+					if(atomicCAS((int*)&child[parentIndex], childIndex, -1) == childIndex)
+					{
+						//This thread is the first here, so the childIndex goes with it
+						#ifdef PACKDEBUG
+							printf("\tThread %d will write to childIndex %d\n", idx, childIndex);
+						#endif
+						break;
+					} else
+					{
+						#ifdef PACKDEBUG
+							printf("\tThread %d was too slow\n", idx);
+						#endif
+					}
+				}
+				//Advance down the tree and assign new parent node
+				parentNode = childIndex;
+				#ifdef PACKDEBUG
+					printf("TOP: Thread %d hit childIndex %d\n", idx, childIndex);
+				#endif
+			}
+		}
+
+		//Inspect children of this parent cell
+		notAtTop         = false;	//assume all children are done
+		bool writeOutput = false;
+		for (int i = 0; i< 4; i++)
+		{
+			int chk = offsets[shift + i];
+
+			int tmpIdx = 4*parentNode + chk;
+			childIndex = child[tmpIdx];
+			if (childIndex >= 0)
+			{
+				//Leaf check
+				if ((childIndex < d) && (childIndex >=0))
+				{
+					//We're at a leaf, so set to unallocated = -1
+					if(atomicCAS((int*)&child[tmpIdx], childIndex, -1) == childIndex)
+					{
+						//This thread is the first here, so the childIndex goes with it
+						writeOutput = true;
+						#ifdef PACKDEBUG
+							printf("\tThread %d will write to NEW childIndex %d\n", idx, childIndex);
+						#endif
+						break;
+					} else
+					{
+						#ifdef PACKDEBUG
+							printf("\tThread %d was too slow\n", idx);
+						#endif
+						continue;
+					}
+				} else
+				{
+					//Advance to next level down tree
+					notAtTop    = true;
+					parentIndex = tmpIdx;
+					parentNode  = childIndex;
+					break;
+				}
+			}
+		}
+		if (writeOutput)
+			break;
+
+		//If all children are done, then mark parent as done and go back to the top
+		if (!notAtTop)
+		{
+			//It doesn't matter which thread gets here first
+			atomicExch((int*)&child[parentIndex], -1);
+			#ifdef PACKDEBUG
+				printf("\tThread %d is closing out parent [node, index]: [%d, %d]\n", idx, parentNode, parentIndex);
+			#endif
+		}
+		//Return if no more children
+		if (parentNode == n)
+		{
+			#ifdef PACKDEBUG
+				printf("Thread %d has found no children. Returning...\n", idx, iterations);
+			#endif
+			xf[idx]     = -1.0f;
+			yf[idx]     = -1.0f;
+			scoref[idx] = -1.0f;
+			return;
+		}
+
+		//DEBUGGING
+		if (iterations > q)
+		{
+			#ifdef PACKDEBUG
+				printf("Thread %d has gone around %d times. Returning...\n", idx, iterations);
+			#endif
+			xf[idx]     = -1.0f;
+			yf[idx]     = -1.0f;
+			scoref[idx] = -1.0f;
+			return;
+		}
+	}
+
+	#ifdef PACKDEBUG
+		printf("BOTTOM: Thread %d writing out childIndex %d\n", idx, childIndex);
+	#endif
+
+	//Write out into packed array
+	xf[idx]     = x[childIndex];
+	yf[idx]     = y[childIndex];
+	scoref[idx] = score[childIndex];
+}
+
+__global__ void pack_filteredDev_data_kernel(float* xf, float* yf, float* scoref,
+											float* x, float* y, float* score,
+											int* child, const int n, unsigned int* pd, const int q)
+{
+	/*
+	Data filtered through the Quad Tree are scattered across the child array. We need to pack
+	them into xf, yf, and scoref.
+
+	It uses depth-first search.
+
+	Marking leaves or internal cells as -1 means they have been fully processed (unallocated again)
+
+	index:	a global index start at n
+	n:		root of tree node index
+	d:		the number of current data
+	q:		the number of filtered data
+	*/
+
+	//Read d into shared memory and broadcast
+	static __shared__ int shared[1];
+	if (threadIdx.x == 0)
+		shared[0] = (int)(*pd);
+	__syncthreads();
+
+	//Write to local register
+	int d = shared[0];
 
 	#ifdef PACKDEBUG
 	if (d > 32)

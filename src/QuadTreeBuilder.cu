@@ -431,6 +431,24 @@ int QuadTreeBuilder::filter()
 	return filter(d_x, d_y, d_score, numTestData, numFilteredData);
 }
 
+//Takes in device side counter
+int QuadTreeBuilder::filter(float* x, float* y, float* score, unsigned int* d, const int q)
+{
+	if (numData < 0)
+	{
+		fprintf(stderr, "QuadTreeBuilder::filter(): numData < 0, must initialize prior to filtering\n");
+		return -1;
+	}
+
+	//This a tight upperbound upon cells for a target set size of filtered data
+	int f = (int)ceil(((float)q - 1.0f)/3.0f);
+
+	ResetFilterArrays(q, width, height);
+	FilterQuadTreeDev(d, q, f);
+
+	return 0;
+}
+
 //Write visualization
 int QuadTreeBuilder::createBuildViz()
 {
@@ -588,6 +606,31 @@ void QuadTreeBuilder::FilterQuadTree(const int d, const int q, const int f)
 	checkCudaErrors(cudaEventRecord(start,0));
 
 	pack_filtered_data_kernel<<<blocks, threads>>>(d_xf, d_yf, d_scoref, d_x, d_y, d_score, d_child, numData, d, q);
+	cudaDeviceSynchronize();
+	getLastCudaError("FilterTreePack");
+
+	checkCudaErrors(cudaEventRecord(stop,0));
+	checkCudaErrors(cudaEventSynchronize(stop));
+	checkCudaErrors(cudaEventElapsedTime(&elpsTime, start, stop));
+	printf("\n\nElapsed time for QuadTree Pack:  %9.6f ms \n", elpsTime);
+}
+
+void QuadTreeBuilder::FilterQuadTreeDev(unsigned int* d, const int q, const int f)
+{
+	checkCudaErrors(cudaEventRecord(start,0));
+
+	filter_treeDev_kernel<<<blocks, threads>>>(d_x, d_y, d_score, d_rx, d_ry, d_child, d_index, d_left, d_right, d_bottom, d_top, numData, numNodes, d, f);
+	cudaDeviceSynchronize();
+	getLastCudaError("FilterQuadTree");
+
+	checkCudaErrors(cudaEventRecord(stop,0));
+	checkCudaErrors(cudaEventSynchronize(stop));
+	checkCudaErrors(cudaEventElapsedTime(&elpsTime, start, stop));
+	printf("\n\nElapsed time for QuadTree Filter:  %9.6f ms \n", elpsTime);
+
+	checkCudaErrors(cudaEventRecord(start,0));
+
+	pack_filteredDev_data_kernel<<<blocks, threads>>>(d_xf, d_yf, d_scoref, d_x, d_y, d_score, d_child, numData, d, q);
 	cudaDeviceSynchronize();
 	getLastCudaError("FilterTreePack");
 
