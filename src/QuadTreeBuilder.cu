@@ -58,12 +58,12 @@ QuadTreeBuilder::QuadTreeBuilder()
 	timersCreated = false;
 }
 
-QuadTreeBuilder::QuadTreeBuilder(int n, int w, int h, int d, int q):
+QuadTreeBuilder::QuadTreeBuilder(int n, int w, int h, int q, int d):
 	numData(n),
 	width(w),
 	height(h),
-	numTestData(d),
-	numFilteredData(q)
+	numFilteredData(q),
+	numTestData(d)
 {
 	numNodes = 2*n+12000;	// A magic large function of n
 
@@ -109,7 +109,7 @@ QuadTreeBuilder::QuadTreeBuilder(int n, int w, int h, int d, int q):
 	h_y      = new float[numNodes];
 	checkCudaErrors(cudaMalloc((void**)&d_img, imgSz));
 
-	if ((numTestData > 0) && (numFilteredData > 0) && (numFilteredData < numTestData))
+	if (numFilteredData > 0)
 	{	
 		checkCudaErrors(cudaMalloc((void**)&d_xf, numFilteredData*sizeof(float)));
 		checkCudaErrors(cudaMalloc((void**)&d_yf, numFilteredData*sizeof(float)));
@@ -218,7 +218,7 @@ int QuadTreeBuilder::allocate()
 		checkCudaErrors(cudaMalloc((void**)&d_img, imgSz));
 	}
 
-	if ((numTestData > 0) && (numFilteredData > 0) && (numFilteredData < numTestData))
+	if (numFilteredData > 0)
 	{
 		if (d_xf==NULL)
 		{
@@ -359,7 +359,7 @@ void QuadTreeBuilder::deallocate()
 }
 
 //Set parameters: n is required for functioning. w and h are for visualization
-void QuadTreeBuilder::setParameters(int n, int w, int h, int d, int q)
+void QuadTreeBuilder::setParameters(int n, int w, int h, int q, int d)
 {
 	//Set object
 	width           = w;
@@ -409,8 +409,6 @@ int QuadTreeBuilder::build()
 }
 
 //filter the data from d > f points to f points according to highest score
-//Takes in device side counter
-// int QuadTreeBuilder::filter(float* x, float* y, float* score, unsigned int* d, const int f);
 //Takes in host side counter
 int QuadTreeBuilder::filter(float* x, float* y, float* score, const int d, const int q)
 {
@@ -419,9 +417,10 @@ int QuadTreeBuilder::filter(float* x, float* y, float* score, const int d, const
 		fprintf(stderr, "QuadTreeBuilder::filter(): numData < 0, must initialize prior to filtering\n");
 		return -1;
 	}
-	if (d > numData)
+	if ((d > numData) || (d <= q))
 	{
-		fprintf(stderr, "QuadTreeBuilder::filter(): d must be <= numData\n");
+		fprintf(stderr, "QuadTreeBuilder::filter(): d must be <= numData and > q\n");
+		return -1;
 	}
 
 	//This a tight upperbound upon cells for a target set size of filtered data

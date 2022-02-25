@@ -157,15 +157,6 @@ int main(int argc, char** argv)
 
 	printf("\tDevice %d: \"%s\"\n", dev, deviceProp.name);
 
-	// OpenGL: initialize on this device and set up windows
-	if (false == initGL(&argc, argv))
-	{
-		return -1;
-	}
-
-	// Create the CUTIL timer
-	sdkCreateTimer(&timer);
-
 	//Allocate Memory
 	if (quadTree.allocate() < 0)
 	{
@@ -178,6 +169,15 @@ int main(int argc, char** argv)
 		cleanup();
 		return -1;
 	}
+
+	// OpenGL: initialize on this device and set up windows
+	if (false == initGL(&argc, argv))
+	{
+		return -1;
+	}
+
+	// Create the CUTIL timer
+	sdkCreateTimer(&timer);
 
 	//convert device memory to texture
 	cudaArray_t ArrIm;
