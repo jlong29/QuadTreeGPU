@@ -427,7 +427,7 @@ int QuadTreeBuilder::filter(float* x, float* y, float* score, const int d, const
 	}
 
 	//This a tight upperbound upon cells for a target set size of filtered data
-	int f = (int)ceil(((float)q - 1.0f)/3.0f);
+	int f = (int)ceil(((float)q*cellMargin - 1.0f)/3.0f);
 
 	ResetFilterArrays(q, width, height);
 	FilterQuadTree(d, q, f);
@@ -450,7 +450,7 @@ int QuadTreeBuilder::filter(float* x, float* y, float* score, unsigned int* d, c
 	}
 
 	//This a tight upperbound upon cells for a target set size of filtered data
-	int f = (int)ceil(((float)q - 1.0f)/3.0f);
+	int f = (int)ceil(((float)q*cellMargin - 1.0f)/3.0f);
 
 	ResetFilterArrays(q, width, height);
 	FilterQuadTreeDev(d, q, f);

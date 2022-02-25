@@ -3,9 +3,22 @@
 
 /* QuadTreeBuilder
 This class is for demonstrating how to build a QuadTree on a GPU using CUDA.
-It assumes the output data and quadtree will be vizualized, and as such the
-toy data that is created is generated to fit within an image. The underlying
-routines for generating the QuadTree do not require this constraint
+
+It also demonstrates how to filter a data set of size D down to a dataset of
+size Q with Q < D, using a quad tree.
+
+It assumes the data and quadtree are defined over an integer grid of size
+[W, H] with W and H > 0 aka an Image.
+
+Evaluation applications are built to validate the code through vizualization.
+See the following defines to compile with alternative behaviors:
+
+QuadTreeBuild.cu
+	TIMINGDEBUG: for wrapping kernels in timers
+quadTreeKernels.cu
+	BUILDDEBUG: for outputting logic that traces threads
+	FILTERDEBUG:  for outputting logic that traces threads
+	PACKDEBUG:  for outputting logic that traces threads
 
 author: John D. Long, II PhD	email: jlong29@gmail.com
 */
@@ -27,6 +40,11 @@ class QuadTreeBuilder
 		//Optional Quad Tree Filter parameters
 		int numTestData;		// <= numData
 		int numFilteredData;	// < numTestData
+
+		//A constant multipler on the number of filtered data
+		//to create enough cells to return the requested number
+		//of filtered data (this is a fudge factor for handling random insertion order)
+		const float cellMargin = 1.25f;	// works very well up to (numFilteredData/numTestData) = 40%
 
 		float* d_left;
 		float* d_right;
