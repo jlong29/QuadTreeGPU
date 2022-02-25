@@ -60,11 +60,6 @@ class QuadTreeBuilder
 		size_t dataSz;
 		size_t nodeSz;
 
-		//Packed arrays from filtered data
-		float* d_xf;
-		float* d_yf;
-		float* d_scoref;
-
 		int*   d_child;
 
 		int*   d_index;
@@ -75,6 +70,11 @@ class QuadTreeBuilder
 		cudaEvent_t start, stop; // used for timing
 
 	public:
+		//Packed arrays from filtered data
+		float* d_xf;
+		float* d_yf;
+		float* d_scoref;
+
 		float* h_x;
 		float* h_y;
 
