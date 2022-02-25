@@ -356,8 +356,6 @@ void QuadTreeBuilder::deallocate()
 		checkCudaErrors(cudaEventDestroy(stop));
 		timersCreated = false;
 	}
-
-	cudaDeviceSynchronize();
 }
 
 //Set parameters: n is required for functioning. w and h are for visualization
