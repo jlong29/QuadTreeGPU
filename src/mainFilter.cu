@@ -36,6 +36,8 @@ int window_width;
 int window_height;
 float aspRat;
 
+using namespace quadTreeGPU;
+
 //The star of the show
 QuadTreeBuilder quadTree;
 

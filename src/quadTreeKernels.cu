@@ -4,7 +4,7 @@
 
 #include "quadTreeKernels.h"
 
-namespace quadTreeKernels
+namespace quadTreeGPU{ namespace quadTreeKernels
 {
 
 // #define BUILDDEBUG
@@ -1387,4 +1387,5 @@ __global__ void pack_filteredDev_data_kernel(float* xf, float* yf, float* scoref
 	scoref[idx] = score[childIndex];
 }
 
-} // namespace quadTreeKernels
+}	// namespace quadTreeKernels
+}	// namespace quadTreeGPU

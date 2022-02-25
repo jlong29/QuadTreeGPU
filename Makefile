@@ -265,7 +265,7 @@ endif
 # Target rules
 all: build
 
-build: quadTreeGPU quadTreeFilterGPU
+build: quadTreeGPU quadTreeFilterGPU quadTreeFilterDevGPU
 
 check.incs:
 	@echo $(INCLUDES)
@@ -304,13 +304,22 @@ mainBuild.o:$(SRC_DIR)/mainBuild.cu
 mainFilter.o:$(SRC_DIR)/mainFilter.cu
 	$(EXEC) $(NVCC) $(INCLUDES) $(ALL_CCFLAGS) -std=c++11 $(GENCODE_FLAGS) -c $<
 
+# main filter dev object
+mainFilterDev.o:$(SRC_DIR)/mainFilterDev.cu
+	$(EXEC) $(NVCC) $(INCLUDES) $(ALL_CCFLAGS) -std=c++11 $(GENCODE_FLAGS) -c $<
+
 # main build application
 quadTreeGPU: mainBuild.o QuadTreeBuilder.o quadTreeKernels.o
 	$(EXEC) $(NVCC) $(ALL_LDFLAGS) $(GENCODE_FLAGS) -o $@ $+ $(LIBRARIES)
 	$(EXEC) mv $@ ./bin
 
-# main build application
+# main Filter application
 quadTreeFilterGPU: mainFilter.o QuadTreeBuilder.o quadTreeKernels.o
+	$(EXEC) $(NVCC) $(ALL_LDFLAGS) $(GENCODE_FLAGS) -o $@ $+ $(LIBRARIES)
+	$(EXEC) mv $@ ./bin
+
+# main Filter application
+quadTreeFilterDevGPU: mainFilterDev.o QuadTreeBuilder.o quadTreeKernels.o
 	$(EXEC) $(NVCC) $(ALL_LDFLAGS) $(GENCODE_FLAGS) -o $@ $+ $(LIBRARIES)
 	$(EXEC) mv $@ ./bin
 

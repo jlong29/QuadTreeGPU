@@ -11,6 +11,11 @@
 
 #include "quadTreeKernels.h"
 
+namespace quadTreeGPU
+{
+
+// #define TIMINGDEBUG
+
 using namespace quadTreeKernels;
 
 QuadTreeBuilder::QuadTreeBuilder()
@@ -388,15 +393,19 @@ int QuadTreeBuilder::build()
 		return -1;
 	}
 
+	#ifdef TIMINGDEBUG
 	checkCudaErrors(cudaEventRecord(start,0));
+	#endif
 
 	ResetArrays(width, height);
 	BuildQuadTree();
 
+	#ifdef TIMINGDEBUG
 	checkCudaErrors(cudaEventRecord(stop,0));
 	checkCudaErrors(cudaEventSynchronize(stop));
 	checkCudaErrors(cudaEventElapsedTime(&elpsTime, start, stop));
 	printf("\n\nElapsed time for QuadTree Build:  %9.6f ms \n", elpsTime);
+	#endif
 
 	return 0;
 }
@@ -464,7 +473,9 @@ int QuadTreeBuilder::createBuildViz()
 	}
 
 	//Write Random data onto image buffer
+	#ifdef TIMINGDEBUG
 	checkCudaErrors(cudaEventRecord(start, 0));
+	#endif
 
 	d_setBlackImag<<<gridDim, blockDim>>>(d_img, width, height);
 
@@ -475,10 +486,12 @@ int QuadTreeBuilder::createBuildViz()
 	//Write point last to avoid occulsion by lines (no alpha blending)
 	d_writeData2Image<<<blocks, threads>>>(d_img, d_x, d_y, width, height, numData);
 
+	#ifdef TIMINGDEBUG
 	checkCudaErrors(cudaEventRecord(stop, 0));
 	checkCudaErrors(cudaEventSynchronize(stop));
 	checkCudaErrors(cudaEventElapsedTime(&elpsTime, start, stop));
 	printf("\n\nElapsed time for creating build viz:      %9.6f ms \n", elpsTime);
+	#endif
 
 	return 0;
 }
@@ -493,7 +506,9 @@ int QuadTreeBuilder::createFilterViz()
 	}
 
 	//Write Random data onto image buffer
+	#ifdef TIMINGDEBUG
 	checkCudaErrors(cudaEventRecord(start, 0));
+	#endif
 
 	d_setBlackImag<<<gridDim, blockDim>>>(d_img, width, height);
 
@@ -507,10 +522,13 @@ int QuadTreeBuilder::createFilterViz()
 	blocksD = divUp(numFilteredData, threads);
 	d_writeFilter2Image<<<blocksD, threads>>>(d_img, d_xf, d_yf, width, height, numFilteredData);
 
+	#ifdef TIMINGDEBUG
 	checkCudaErrors(cudaEventRecord(stop, 0));
 	checkCudaErrors(cudaEventSynchronize(stop));
 	checkCudaErrors(cudaEventElapsedTime(&elpsTime, start, stop));
 	printf("\n\nElapsed time for creating filter viz:     %9.6f ms \n", elpsTime);
+	#endif
+
 	return 0;
 }
 
@@ -541,16 +559,20 @@ int QuadTreeBuilder::resetData()
 	}
 
 	//Generate Random Data
+	#ifdef TIMINGDEBUG
 	checkCudaErrors(cudaEventRecord(start, 0));
+	#endif
 
 	int seed = (int)time(0);
 
 	generate_uniform2D_kernel<<<blocks, threads>>>(d_x, d_y, seed, width, height, numData);
 
+	#ifdef TIMINGDEBUG
 	checkCudaErrors(cudaEventRecord(stop, 0));
 	checkCudaErrors(cudaEventSynchronize(stop));
 	checkCudaErrors(cudaEventElapsedTime(&elpsTime, start, stop));
 	printf("\n\nElapsed time for Random Data Generation:  %9.6f ms \n", elpsTime);
+	#endif
 
 	return 0;
 }
@@ -564,16 +586,20 @@ int QuadTreeBuilder::resetFilterData()
 	}
 
 	//Generate Random Data
+	#ifdef TIMINGDEBUG
 	checkCudaErrors(cudaEventRecord(start, 0));
+	#endif
 
 	int seed = (int)time(0);
 
 	generate_uniform2Dfilter_kernel<<<blocks, threads>>>(d_x, d_y, d_score, seed, width, height, numTestData);
 
+	#ifdef TIMINGDEBUG
 	checkCudaErrors(cudaEventRecord(stop, 0));
 	checkCudaErrors(cudaEventSynchronize(stop));
 	checkCudaErrors(cudaEventElapsedTime(&elpsTime, start, stop));
 	printf("\n\nElapsed time make Random Filter Data:     %9.6f ms \n", elpsTime);
+	#endif
 
 	return 0;
 }
@@ -597,50 +623,56 @@ void QuadTreeBuilder::BuildQuadTree()
 //Filter with quad tree
 void QuadTreeBuilder::FilterQuadTree(const int d, const int q, const int f)
 {
+	#ifdef TIMINGDEBUG
 	checkCudaErrors(cudaEventRecord(start,0));
+	#endif
 
 	filter_tree_kernel<<<blocks, threads>>>(d_x, d_y, d_score, d_rx, d_ry, d_child, d_index, d_left, d_right, d_bottom, d_top, numData, numNodes, d, f);
-	cudaDeviceSynchronize();
-	getLastCudaError("FilterQuadTree");
 
+	#ifdef TIMINGDEBUG
 	checkCudaErrors(cudaEventRecord(stop,0));
 	checkCudaErrors(cudaEventSynchronize(stop));
 	checkCudaErrors(cudaEventElapsedTime(&elpsTime, start, stop));
 	printf("\n\nElapsed time for QuadTree Filter:  %9.6f ms \n", elpsTime);
 
 	checkCudaErrors(cudaEventRecord(start,0));
+	#endif
 
 	pack_filtered_data_kernel<<<blocks, threads>>>(d_xf, d_yf, d_scoref, d_x, d_y, d_score, d_child, numData, d, q);
-	cudaDeviceSynchronize();
-	getLastCudaError("FilterTreePack");
 
+	#ifdef TIMINGDEBUG
 	checkCudaErrors(cudaEventRecord(stop,0));
 	checkCudaErrors(cudaEventSynchronize(stop));
 	checkCudaErrors(cudaEventElapsedTime(&elpsTime, start, stop));
 	printf("\n\nElapsed time for QuadTree Pack:  %9.6f ms \n", elpsTime);
+	#endif
 }
 
 void QuadTreeBuilder::FilterQuadTreeDev(unsigned int* d, const int q, const int f)
 {
+	#ifdef TIMINGDEBUG
 	checkCudaErrors(cudaEventRecord(start,0));
+	#endif
 
 	filter_treeDev_kernel<<<blocks, threads>>>(d_x, d_y, d_score, d_rx, d_ry, d_child, d_index, d_left, d_right, d_bottom, d_top, numData, numNodes, d, f);
-	cudaDeviceSynchronize();
-	getLastCudaError("FilterQuadTree");
 
+	#ifdef TIMINGDEBUG
 	checkCudaErrors(cudaEventRecord(stop,0));
 	checkCudaErrors(cudaEventSynchronize(stop));
 	checkCudaErrors(cudaEventElapsedTime(&elpsTime, start, stop));
 	printf("\n\nElapsed time for QuadTree Filter:  %9.6f ms \n", elpsTime);
 
 	checkCudaErrors(cudaEventRecord(start,0));
+	#endif
 
 	pack_filteredDev_data_kernel<<<blocks, threads>>>(d_xf, d_yf, d_scoref, d_x, d_y, d_score, d_child, numData, d, q);
-	cudaDeviceSynchronize();
-	getLastCudaError("FilterTreePack");
 
+	#ifdef TIMINGDEBUG
 	checkCudaErrors(cudaEventRecord(stop,0));
 	checkCudaErrors(cudaEventSynchronize(stop));
 	checkCudaErrors(cudaEventElapsedTime(&elpsTime, start, stop));
 	printf("\n\nElapsed time for QuadTree Pack:  %9.6f ms \n", elpsTime);
+	#endif
 }
+
+}	//namespace QuadTree

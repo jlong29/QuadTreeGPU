@@ -12,7 +12,7 @@
 
 typedef unsigned char uchar;
 
-namespace quadTreeKernels
+namespace quadTreeGPU{ namespace quadTreeKernels
 {
 
 // Image Processing //
@@ -63,5 +63,6 @@ __global__ void pack_filteredDev_data_kernel(float* xf, float* yf, float* scoref
 											int* child, const int n, unsigned int* pd, const int q);
 
 } // namespace quadTreeKernels
+} // namespace quadTreeGPU
 
 #endif	//__QUADTREEKERNELS_H__

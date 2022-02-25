@@ -12,6 +12,9 @@ author: John D. Long, II PhD	email: jlong29@gmail.com
 
 #include <cuda_runtime.h>
 
+namespace quadTreeGPU
+{
+
 class QuadTreeBuilder 
 {
 	private:
@@ -122,5 +125,7 @@ class QuadTreeBuilder
 			return (x + y - 1) / y;
 		}
 };
+
+}	//namespace quadTreeGPU
 
 #endif
