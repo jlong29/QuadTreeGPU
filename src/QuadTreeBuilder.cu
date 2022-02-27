@@ -381,6 +381,10 @@ void QuadTreeBuilder::setData(const float* x, const float* y, const float* score
 	checkCudaErrors(cudaMemcpy(d_y, y, d*sizeof(float), cudaMemcpyDeviceToDevice));
 	checkCudaErrors(cudaMemcpy(d_score, score, d*sizeof(float), cudaMemcpyDeviceToDevice));
 }
+void QuadTreeBuilder::setData(float* x, float* y, float* score, const unsigned int* d)
+{
+	d_setData<<<blocks, threads>>>(d_x, d_y, d_score, x, y, score, d);
+}
 
 //build the quad tree
 int QuadTreeBuilder::build()
@@ -449,6 +453,7 @@ int QuadTreeBuilder::filter(float* x, float* y, float* score, unsigned int* d, c
 	//This a tight upperbound upon cells for a target set size of filtered data
 	int f = (int)ceil(((float)q*cellMargin - 1.0f)/3.0f);
 
+	setData(x, y, score, d);
 	ResetFilterArrays(q, width, height);
 	FilterQuadTreeDev(d, q, f);
 
@@ -611,6 +616,7 @@ void QuadTreeBuilder::ResetFilterArrays(const int q, const int w, const int h)
 	reset_filter_arrays_kernel<<<blocks, threads>>>(d_mutex, d_x, d_y, d_score, d_xf, d_yf, d_scoref, d_rx, d_ry, d_child, d_index,
 												d_left, d_right, d_bottom, d_top, q, w, h, numData, numNodes);
 }
+
 //Builds a quad tree
 void QuadTreeBuilder::BuildQuadTree()
 {
