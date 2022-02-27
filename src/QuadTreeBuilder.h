@@ -45,7 +45,7 @@ class QuadTreeBuilder
 		//A constant multipler on the number of filtered data
 		//to create enough cells to return the requested number
 		//of filtered data (this is a fudge factor for handling random insertion order)
-		const float cellMargin = 1.25f;	// works very well up to (numFilteredData/numTestData) = 40%
+		float cellMargin;
 
 		float* d_left;
 		float* d_right;
@@ -98,6 +98,8 @@ class QuadTreeBuilder
 		void setData(const float* x, const float* y);
 		void setData(const float* x, const float* y, const float* score, const int d);
 		void setData(float* x, float* y, float* score, const unsigned int* d);
+
+		void setCellMargin(const float cm);
 
 		int getNumData();
 		int resetData();

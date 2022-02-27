@@ -65,7 +65,8 @@ QuadTreeBuilder::QuadTreeBuilder(int n, int w, int h, int q, int d):
 	numFilteredData(q),
 	numTestData(d)
 {
-	numNodes = 2*n+12000;	// A magic large function of n
+	numNodes   = 2*n+12000;	// A magic large function of n
+	cellMargin = 2.0f;
 
 	// allocate host data
 	dataSz   = numData*sizeof(float);
@@ -142,6 +143,8 @@ int QuadTreeBuilder::allocate()
 
 	numNodes = 2*numData+12000;	// A magic large function of n
 	nodeSz   = numNodes*sizeof(float);
+
+	cellMargin = 2.0f;
 
 	//GPU Launch Configurations
 	//1D
@@ -384,6 +387,11 @@ void QuadTreeBuilder::setData(const float* x, const float* y, const float* score
 void QuadTreeBuilder::setData(float* x, float* y, float* score, const unsigned int* d)
 {
 	d_setData<<<blocks, threads>>>(d_x, d_y, d_score, x, y, score, d);
+}
+
+void QuadTreeBuilder::setCellMargin(const float cm)
+{
+	cellMargin = cm;
 }
 
 //build the quad tree
