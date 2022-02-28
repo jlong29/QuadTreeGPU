@@ -265,7 +265,7 @@ endif
 # Target rules
 all: build
 
-build: quadTreeGPU quadTreeFilterGPU quadTreeFilterDevGPU profileQuadTreeFilterGPU
+build: quadTreeGPU quadTreeFilterGPU quadTreeFilterDevGPU profileFilterGPU profileFilterDevAsyncGPU
 
 check.incs:
 	@echo $(INCLUDES)
@@ -304,12 +304,16 @@ mainBuild.o:$(SRC_DIR)/mainBuild.cu
 mainFilter.o:$(SRC_DIR)/mainFilter.cu
 	$(EXEC) $(NVCC) $(INCLUDES) $(ALL_CCFLAGS) -std=c++11 $(GENCODE_FLAGS) -c $<
 
+# main filter dev object
+mainFilterDev.o:$(SRC_DIR)/mainFilterDev.cu
+	$(EXEC) $(NVCC) $(INCLUDES) $(ALL_CCFLAGS) -std=c++11 $(GENCODE_FLAGS) -c $<
+
 # main profile filter object
 mainProfileFilter.o:$(SRC_DIR)/mainProfileFilter.cu
 	$(EXEC) $(NVCC) $(INCLUDES) $(ALL_CCFLAGS) -std=c++11 $(GENCODE_FLAGS) -c $<
 
-# main filter dev object
-mainFilterDev.o:$(SRC_DIR)/mainFilterDev.cu
+# main profile filter dev async object
+mainProfileFilterDevAsync.o:$(SRC_DIR)/mainProfileFilterDevAsync.cu
 	$(EXEC) $(NVCC) $(INCLUDES) $(ALL_CCFLAGS) -std=c++11 $(GENCODE_FLAGS) -c $<
 
 # main build application
@@ -323,7 +327,12 @@ quadTreeFilterGPU: mainFilter.o QuadTreeBuilder.o quadTreeKernels.o
 	$(EXEC) mv $@ ./bin
 
 # main profile app of Filter application
-profileQuadTreeFilterGPU: mainProfileFilter.o QuadTreeBuilder.o quadTreeKernels.o
+profileFilterGPU: mainProfileFilter.o QuadTreeBuilder.o quadTreeKernels.o
+	$(EXEC) $(NVCC) $(ALL_LDFLAGS) $(GENCODE_FLAGS) -o $@ $+ $(LIBRARIES)
+	$(EXEC) mv $@ ./bin
+
+# main profile app of FilterDev Async application
+profileFilterDevAsyncGPU: mainProfileFilterDevAsync.o QuadTreeBuilder.o quadTreeKernels.o
 	$(EXEC) $(NVCC) $(ALL_LDFLAGS) $(GENCODE_FLAGS) -o $@ $+ $(LIBRARIES)
 	$(EXEC) mv $@ ./bin
 

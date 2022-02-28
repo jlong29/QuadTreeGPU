@@ -303,19 +303,23 @@ __global__ void reset_filter_arrays_kernel(int* mutex, float* x, float* y, float
 	}
 }
 
-__global__ void d_setData(float* x, float* y, float* score, float* xn, float* yn, float* scoren, const unsigned int* pd)
+__global__ void d_setData(float* x, float* y, float* score, unsigned int* pd, float* xn, float* yn, float* scoren, const unsigned int* pdn)
 {
+	int idx    = threadIdx.x + blockDim.x*blockIdx.x;
+	int stride = blockDim.x*gridDim.x;
+
 	//Read d into shared memory and broadcast
 	static __shared__ int shared[1];
 	if (threadIdx.x == 0)
-		shared[0] = (int)(*pd);
+		shared[0] = (int)(*pdn);
 	__syncthreads();
 
 	//Write to local register
 	int d = shared[0];
 
-	int idx    = threadIdx.x + blockDim.x*blockIdx.x;
-	int stride = blockDim.x*gridDim.x;
+	//First thread first out to device counter
+	if (idx == 0)
+		pd[0] = pdn[0];
 
 	// reset quadtree arrays
 	while(idx < d)

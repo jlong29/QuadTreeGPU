@@ -47,6 +47,8 @@ class QuadTreeBuilder
 		//of filtered data (this is a fudge factor for handling random insertion order)
 		float cellMargin;
 
+		unsigned int* d_numTestData;
+
 		float* d_left;
 		float* d_right;
 		float* d_bottom;
@@ -117,6 +119,10 @@ class QuadTreeBuilder
 		int filter(float* x, float* y, float* score, unsigned int* d, const int q);
 		//Operates upon internal state and external device data intput
 		int filter(unsigned int* d);
+		//Takes in device side counter
+		int filter_async(float* x, float* y, float* score, unsigned int* d, const int q);
+		//Operates upon internal state and external device data intput
+		int filter_async(unsigned int* d);
 
 		//Create build visualization
 		int createBuildViz();
@@ -126,6 +132,9 @@ class QuadTreeBuilder
 		int downloadData();
 		int downloadFilterData();
 
+		//Join Cuda Stream
+		void join();
+
 	private:
 		//Root GPU Launch Optimization
 		//1D
@@ -134,6 +143,9 @@ class QuadTreeBuilder
 
 		//2D
 		dim3 blockDim, gridDim;
+
+		cudaStream_t stream;
+		bool streamCreated;
 
 		//Resets arrays used in constructing the quad tree
 		void ResetArrays(const int w, const int h);

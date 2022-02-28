@@ -40,7 +40,7 @@ __global__ void reset_filter_arrays_kernel(int* mutex, float* x, float* y, float
 											float* rx, float* ry, int* child, int* index, float* left, float* right, float* bottom, float* top,
 											const int q, const int w, const int h, int n, int m);
 
-__global__ void d_setData(float* x, float* y, float* score, float* xn, float* yn, float* scoren, const unsigned int* pd);
+__global__ void d_setData(float* x, float* y, float* score, unsigned int* pd, float* xn, float* yn, float* scoren, const unsigned int* pdn);
 
 __global__ void build_tree_kernel(volatile float* x, volatile float* y, float* rx, float* ry, volatile int* child, int* index,
 									const float* left, const float* right, const float* bottom, const float* top,
