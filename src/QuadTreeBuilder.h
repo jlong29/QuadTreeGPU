@@ -100,6 +100,7 @@ class QuadTreeBuilder
 		void setData(const float* x, const float* y);
 		void setData(const float* x, const float* y, const float* score, const int d);
 		void setData(float* x, float* y, float* score, const unsigned int* d);
+		void setData(float* x, float* y, float* score, const unsigned int* d, const int q);
 
 		void setCellMargin(const float cm);
 
@@ -123,6 +124,8 @@ class QuadTreeBuilder
 		int filter_async(float* x, float* y, float* score, unsigned int* d, const int q);
 		//Operates upon internal state and external device data intput
 		int filter_async(unsigned int* d);
+		//Operates upon internal state
+		int filter_async();
 
 		//Create build visualization
 		int createBuildViz();

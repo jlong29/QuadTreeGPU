@@ -414,6 +414,11 @@ void QuadTreeBuilder::setData(float* x, float* y, float* score, const unsigned i
 {
 	d_setData<<<blocks, threads, 0, stream>>>(d_x, d_y, d_score, d_numTestData, x, y, score, d);
 }
+void QuadTreeBuilder::setData(float* x, float* y, float* score, const unsigned int* d, const int q)
+{
+	numFilteredData = q;	
+	d_setData<<<blocks, threads, 0, stream>>>(d_x, d_y, d_score, d_numTestData, x, y, score, d);
+}
 
 void QuadTreeBuilder::setCellMargin(const float cm)
 {
@@ -530,6 +535,23 @@ int QuadTreeBuilder::filter_async(float* x, float* y, float* score, unsigned int
 int QuadTreeBuilder::filter_async(unsigned int* d)
 {
 	return filter_async(d_x, d_y, d_score, d, numFilteredData);
+}
+//Operates upon internal state
+int QuadTreeBuilder::filter_async()
+{
+	if (numData < 0)
+	{
+		fprintf(stderr, "QuadTreeBuilder::filter(): numData < 0, must initialize prior to filtering\n");
+		return -1;
+	}
+
+	//This a tight upperbound upon cells for a target set size of filtered data
+	int f = (int)ceil(((float)numFilteredData*cellMargin - 1.0f)/3.0f);
+
+	ResetFilterArrays(numFilteredData, width, height);
+	FilterQuadTreeDev(d_numTestData, numFilteredData, f);
+
+	return 0;
 }
 
 //Write visualization
