@@ -32,6 +32,9 @@
 # Makefile project only supported on Mac OS X and Linux Platforms)
 #
 ################################################################################
+# Makefile modified from template provided in NVIDIA SAMPLES
+# by John D Long, II PhD email: jlong29@gmail.com
+
 # Location of source files relative to Makefile
 SRC_DIR=./src
 
