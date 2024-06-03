@@ -214,7 +214,7 @@ __global__ void reset_arrays_kernel(int* mutex, float* x, float* y, float* rx, f
 	// reset quadtree arrays
 	while(idx + offset < m)
 	{  
-#pragma unroll 4
+		#pragma unroll 4
 		for(int i=0;i<4;i++)
 		{
 			child[(idx + offset)*4 + i] = -1;
@@ -261,7 +261,7 @@ __global__ void reset_filter_arrays_kernel(int* mutex, float* x, float* y, float
 	// reset quadtree arrays
 	while(idx + offset < m)
 	{  
-#pragma unroll 4
+		#pragma unroll 4
 		for(int i=0;i<4;i++)
 		{
 			child[(idx + offset)*4 + i] = -1;
