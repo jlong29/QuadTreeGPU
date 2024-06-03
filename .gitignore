@@ -1,3 +1,4 @@
 *.o
 bin
-objs
+src_objs
+app_objs

@@ -7,10 +7,16 @@ using the Quad Tree Filter, you can choose the Q data with high response values 
 distributed across the entire bounded 2D plane. This is very useful when selecting features
 for camera-based SLAM systems.
 
-This code was written under the following conditions
-* linux machine running Ubuntu 16.04.1
+This code was written and validated under the following conditions:
+
+* a linux machine running Ubuntu 16.04.1
 * gnu 4.9.4
 * CUDA 8.0
+
+**NOTES**:
+
+* The exact structure of the QuadTree is dependent upon the order in which the data are entered
+* Given the variable scheduling on GPUS, the same dataset can result in slightly differenct QuadTrees across runs
 
 ## Compiling
 
