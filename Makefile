@@ -223,11 +223,6 @@ INCLUDES  += -I$(CUDA_PATH)/samples/common/inc
 INCLUDES  += -I$(INC_DIR)
 LIBRARIES :=
 
-# Set build directory structure
-$(shell   mkdir -p $(APP_BIN) )
-$(shell   mkdir -p $(SRC_OBJS) )
-$(shell   mkdir -p $(APP_OBJS) )
-
 # CUDA files: src and application
 OBJ_SRCCU :=$(patsubst %.cu, $(SRC_OBJS)/%.o, $(notdir $(wildcard $(addsuffix /*.cu, $(SRC_DIR)))))
 
@@ -311,19 +306,28 @@ else
 endif
 
 # Quad Tree CUDA Kernels
-$(SRC_OBJS)/%.o: $(SRC_DIR)/%.cu $(INC_DIR)/%.h
+$(SRC_OBJS)/%.o: $(SRC_DIR)/%.cu $(INC_DIR)/%.h | $(SRC_OBJS)
 	$(EXEC) $(NVCC) $(INCLUDES) $(ALL_CCFLAGS) $(GENCODE_FLAGS) -c $< -o $@
+
+$(SRC_OBJS):
+	mkdir -p $(SRC_OBJS)
 
 # Application objects
 $(APP_OBJS)/%.o: $(APP_DIR)/%.cu | $(APP_OBJS)
 	$(EXEC) $(NVCC) $(INCLUDES) $(ALL_CCFLAGS)$(GENCODE_FLAGS) -c $< -o $@
 
+$(APP_OBJS):
+	mkdir -p $(APP_OBJS)
+
 # Application binaries
-$(APP_BIN)/%: $(APP_OBJS)/%.o $(OBJ_SRCCU)
+$(APP_BIN)/%: $(APP_OBJS)/%.o $(OBJ_SRCCU) | $(APP_BIN)
 	$(EXEC) $(NVCC) $(ALL_LDFLAGS) $(GENCODE_FLAGS) -o $@ $+ $(LIBRARIES)
 
+$(APP_BIN):
+	mkdir -p $(APP_BIN)
+
 clean:
-	rm -f bin/* src_objs/* app_objs/*
+	rm -rf bin src_objs app_objs
 
 .PHONY: clean all
 .SECONDARY: $(OBJECTS)
