@@ -568,7 +568,7 @@ int QuadTreeBuilder::createBuildViz()
 	checkCudaErrors(cudaEventRecord(start, 0));
 	#endif
 
-	d_setBlackImag<<<gridDim, blockDim>>>(d_img, width, height);
+	d_setGrayScaleImag<<<gridDim, blockDim>>>(d_img, width, height);
 
 	int blocksD = divUp(numNodes - numData, threads);
 	std::cout << "BlocksD is " << blocksD << std::endl;
@@ -601,7 +601,7 @@ int QuadTreeBuilder::createFilterViz()
 	checkCudaErrors(cudaEventRecord(start, 0));
 	#endif
 
-	d_setBlackImag<<<gridDim, blockDim>>>(d_img, width, height);
+	d_setGrayScaleImag<<<gridDim, blockDim>>>(d_img, width, height);
 
 	int blocksD = divUp(numNodes - numData, threads);
 	std::cout << "BlocksD is " << blocksD << std::endl;

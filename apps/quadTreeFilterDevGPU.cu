@@ -71,10 +71,10 @@ static void show_usage(std::string name)
 {
 	std::cerr << "Usage: " << name << " <options(s)>"
 			  << "Options:\n"
-			  << "\t-i,--help\tShow this help message\n"
+			  << "\t-h,--help\tShow this help message\n"
 			  << "\t-n,\t\tset the number of data points to generate\n"
-			  << "\t-d,\t\tset the number of data points to generate then filtered\n"
-			  << "\t-q,\t\tset the number of filtered data points to generate\n"
+			  << "\t-d,\t\tset the number of data points to generate then filter (d < n)\n"
+			  << "\t-q,\t\tset the number of filtered data points to identify (q < d)\n"
 			  << "\t-w,\t\tset the width of the image plane\n"
 			  << "\t-h,\t\tset the height of the image plane\n"
 			  << std::endl;
@@ -94,7 +94,7 @@ int main(int argc, char** argv)
 	for (int i = 1; i < argc; ++i)
 	{
 		std::string arg = argv[i];
-		if ((arg == "-i") || (arg == "--help"))
+		if ((arg == "-h") || (arg == "--help"))
 		{
 			show_usage(argv[0]);
 			return 0;  

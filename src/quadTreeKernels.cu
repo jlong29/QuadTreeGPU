@@ -40,6 +40,13 @@ __device__ __inline__ void setBlueHue(const uchar& hue, uchar4& RGBA)
 	RGBA.z = hue;
 	RGBA.w = 255;
 }
+__device__ __inline__ void setGrayHue(const uchar& hue, uchar4& RGBA)
+{
+	RGBA.x = hue;
+	RGBA.y = hue;
+	RGBA.z = hue;
+	RGBA.w = 255;
+}
 __device__ __inline__ void setBlack(uchar4& RGBA)
 {
 	// points as black(transparent)
@@ -47,6 +54,14 @@ __device__ __inline__ void setBlack(uchar4& RGBA)
 	RGBA.y = 0;
 	RGBA.z = 0;
 	RGBA.w = 0;
+}
+__device__ __inline__ void setYellow(uchar4& RGBA)
+{
+	// points as black(transparent)
+	RGBA.x = 255;
+	RGBA.y = 234;
+	RGBA.z = 0;
+	RGBA.w = 255;
 }
 
 //Black Image: device and host code
@@ -61,8 +76,22 @@ __global__ void d_setBlackImag(uchar4* dst, const int w, const int h)
 		return;
 
 	//Set to RGBA black
-	// setGreenHue(255, dst[y*w + x]);
 	setBlack(dst[y*w + x]);
+}
+
+//GrayScale Image: device and host code
+__global__ void d_setGrayScaleImag(uchar4* dst, const int w, const int h)
+{
+	// Position of the thread in the image.
+	const int x = blockIdx.x*blockDim.x + threadIdx.x;
+	const int y = blockIdx.y*blockDim.y + threadIdx.y;
+
+	// Early exit if the thread is not in the image.
+	if (!in_img(x, y, w, h))
+		return;
+
+	//Set to RGBA grayscale
+	setGrayHue(127, dst[y*w + x]);
 }
 
 //Write Random data onto image buffer

@@ -16,9 +16,9 @@ See the following defines to compile with alternative behaviors:
 QuadTreeBuild.cu
 	TIMINGDEBUG: for wrapping kernels in timers
 quadTreeKernels.cu
-	BUILDDEBUG: for outputting logic that traces threads
-	FILTERDEBUG:  for outputting logic that traces threads
-	PACKDEBUG:  for outputting logic that traces threads
+	BUILDDEBUG:  for outputting logic that traces threads
+	FILTERDEBUG: for outputting logic that traces threads
+	PACKDEBUG:   for outputting logic that traces threads
 
 author: John D. Long, II PhD	email: jlong29@gmail.com
 */
@@ -104,6 +104,7 @@ class QuadTreeBuilder
 
 		void setCellMargin(const float cm);
 
+		// Test methods for generating toy data
 		int getNumData();
 		int resetData();
 		int resetFilterData();
