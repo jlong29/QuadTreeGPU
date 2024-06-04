@@ -26,9 +26,6 @@ static bool bReset = false;
 // GLOBAL Variables //
 //Problem Size
 //Parameters
-unsigned int D;
-unsigned int* d_D;
-int Q;
 int N;
 int W;
 int H;
@@ -71,30 +68,26 @@ static void show_usage(std::string name)
 {
 	std::cerr << "Usage: " << name << " <options(s)>"
 			  << "Options:\n"
-			  << "\t-i,--help\tShow this help message\n"
+			  << "\t-h,--help\tShow this help message\n"
 			  << "\t-n,\t\tset the number of data points to generate\n"
-			  << "\t-d,\t\tset the number of data points to generate then filtered\n"
-			  << "\t-q,\t\tset the number of filtered data points to generate\n"
 			  << "\t-w,\t\tset the width of the image plane\n"
 			  << "\t-h,\t\tset the height of the image plane\n"
 			  << std::endl;
 }
 
-int runFilter();
+int runBuild();
 
 int main(int argc, char** argv)
 {
 	//Input Parameters
-	D = 16;
-	Q = D/2;
-	N = 2*D;
+	N = 16;
 	W = 640;
 	H = 480;
 
 	for (int i = 1; i < argc; ++i)
 	{
 		std::string arg = argv[i];
-		if ((arg == "-i") || (arg == "--help"))
+		if ((arg == "-h") || (arg == "--help"))
 		{
 			show_usage(argv[0]);
 			return 0;  
@@ -103,26 +96,6 @@ int main(int argc, char** argv)
 			if (i + 1 < argc)
 			{
 				N = (size_t)atoi(argv[++i]);
-			} else
-			{
-				fprintf(stderr, "-n option requires one argument indicating a sample size.\n");
-				return -1;
-			}
-		} else if (arg == "-d")
-		{
-			if (i + 1 < argc)
-			{
-				D = (size_t)atoi(argv[++i]);
-			} else
-			{
-				fprintf(stderr, "-n option requires one argument indicating a sample size.\n");
-				return -1;
-			}
-		} else if (arg == "-q")
-		{
-			if (i + 1 < argc)
-			{
-				Q = (size_t)atoi(argv[++i]);
 			} else
 			{
 				fprintf(stderr, "-n option requires one argument indicating a sample size.\n");
@@ -151,29 +124,11 @@ int main(int argc, char** argv)
 		}
 	}
 
-	//Check input constraints
-	if (N < (int)D)
-	{
-		N = 2*D;
-		fprintf(stdout, "Setting N to 2*D because inputs had N < D\n");
-	}
-	if (Q >= (int)D)
-	{
-		fprintf(stderr, "The number of filtered data points must be less than the number of generated data points\n");
-		show_usage(argv[0]);
-		return -1;
-	}
-
-	//Transfer D to unsigned int* on device
-	checkCudaErrors(cudaMalloc((void**)&d_D, sizeof(unsigned int)));
-	checkCudaErrors(cudaMemcpy(d_D, &D, sizeof(unsigned int), cudaMemcpyHostToDevice));
-
-	//Set window parameters
 	window_width  = W;
 	window_height = H;
 
 	//Set QuadTreeBuilder parameters
-	quadTree.setParameters(N, W, H, Q, D);
+	quadTree.setParameters(N, W, H);
 
 	//initialize timers
 	fpsCount   = 0;
@@ -209,7 +164,7 @@ int main(int argc, char** argv)
 		return -1;
 	}
 
-	if (runFilter() < 0)
+	if (runBuild() < 0)
 	{
 		cleanup();
 		return -1;
@@ -317,7 +272,7 @@ void display()
 	{
 		bReset = false;
 
-		if (runFilter() < 0)
+		if (runBuild() < 0)
 		{
 			cleanup();
 			return;
@@ -416,23 +371,22 @@ void cleanup()
 	//Deallocate device memory and destory timers
 	quadTree.deallocate();
 
-	checkCudaErrors(cudaFree(d_D));
 	fprintf(stdout,"\t\tAll Cuda resources cleaned\n");
 }
 
-int runFilter()
+int runBuild()
 {
 	//Set random data
-	if (quadTree.resetFilterData() < 0)
+	if (quadTree.resetData() < 0)
 	{
 		return -1;
 	}
 
-	// FILTER WITH QUAD TREE
-	quadTree.filter(d_D);
+	// BUILD QUAD TREE
+	quadTree.build();
 
 	//Visualize output
-	if (quadTree.createFilterViz() < 0)
+	if (quadTree.createBuildViz() < 0)
 	{
 		return -1;
 	}
@@ -443,23 +397,10 @@ int runFilter()
 		return -1;
 	}
 
-	//Download filter data
-	if (quadTree.downloadFilterData() < 0)
-	{
-		return -1;
-	}
-
 	printf("Printing out 2D Noise:\n\t");
 	for (int ii = 0; ii < min(100, N); ii++)
 	{
 		printf("[%d, %d], ", (int)quadTree.h_x[ii], (int)quadTree.h_y[ii]);
-	}
-	printf("\n");
-
-	printf("Printing out 2D FILTERED Noise:\n\t");
-	for (int ii = 0; ii < min(100, Q); ii++)
-	{
-		printf("[%d, %d], ", (int)quadTree.h_xf[ii], (int)quadTree.h_yf[ii]);
 	}
 	printf("\n");
 

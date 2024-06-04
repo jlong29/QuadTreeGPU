@@ -18,6 +18,8 @@ namespace quadTreeGPU{ namespace quadTreeKernels
 // Image Processing //
 //Black Image: device and host code
 __global__ void d_setBlackImag(uchar4* dst, const int w, const int h);
+//Gray Image: device and host code
+__global__ void d_setGrayScaleImag(uchar4* dst, const int w, const int h);
 //Write 2D noise data to image buffer
 __global__ void d_writeData2Image(uchar4* dst, const float* __restrict noiseX, const float* __restrict noiseY,const int w, const int h, const int n);
 //Write 2D filtered noise data to the image buffer

@@ -26,7 +26,8 @@ static bool bReset = false;
 // GLOBAL Variables //
 //Problem Size
 //Parameters
-int D;
+unsigned int D;
+unsigned int* d_D;
 int Q;
 int N;
 int W;
@@ -70,10 +71,10 @@ static void show_usage(std::string name)
 {
 	std::cerr << "Usage: " << name << " <options(s)>"
 			  << "Options:\n"
-			  << "\t-i,--help\tShow this help message\n"
+			  << "\t-h,--help\tShow this help message\n"
 			  << "\t-n,\t\tset the number of data points to generate\n"
-			  << "\t-d,\t\tset the number of data points to generate then filtered\n"
-			  << "\t-q,\t\tset the number of filtered data points to generate\n"
+			  << "\t-d,\t\tset the number of data points to generate then filter (d < n)\n"
+			  << "\t-q,\t\tset the number of filtered data points to identify (q < d)\n"
 			  << "\t-w,\t\tset the width of the image plane\n"
 			  << "\t-h,\t\tset the height of the image plane\n"
 			  << std::endl;
@@ -93,7 +94,7 @@ int main(int argc, char** argv)
 	for (int i = 1; i < argc; ++i)
 	{
 		std::string arg = argv[i];
-		if ((arg == "-i") || (arg == "--help"))
+		if ((arg == "-h") || (arg == "--help"))
 		{
 			show_usage(argv[0]);
 			return 0;  
@@ -151,17 +152,21 @@ int main(int argc, char** argv)
 	}
 
 	//Check input constraints
-	if (N < D)
+	if (N < (int)D)
 	{
 		N = 2*D;
 		fprintf(stdout, "Setting N to 2*D because inputs had N < D\n");
 	}
-	if (Q >= D)
+	if (Q >= (int)D)
 	{
 		fprintf(stderr, "The number of filtered data points must be less than the number of generated data points\n");
 		show_usage(argv[0]);
 		return -1;
 	}
+
+	//Transfer D to unsigned int* on device
+	checkCudaErrors(cudaMalloc((void**)&d_D, sizeof(unsigned int)));
+	checkCudaErrors(cudaMemcpy(d_D, &D, sizeof(unsigned int), cudaMemcpyHostToDevice));
 
 	//Set window parameters
 	window_width  = W;
@@ -411,6 +416,7 @@ void cleanup()
 	//Deallocate device memory and destory timers
 	quadTree.deallocate();
 
+	checkCudaErrors(cudaFree(d_D));
 	fprintf(stdout,"\t\tAll Cuda resources cleaned\n");
 }
 
@@ -423,7 +429,7 @@ int runFilter()
 	}
 
 	// FILTER WITH QUAD TREE
-	quadTree.filter();
+	quadTree.filter(d_D);
 
 	//Visualize output
 	if (quadTree.createFilterViz() < 0)

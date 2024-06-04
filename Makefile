@@ -36,7 +36,13 @@
 # by John D Long, II PhD email: jlong29@gmail.com
 
 # Location of source files relative to Makefile
-SRC_DIR=./src
+SRC_DIR  =./src
+INC_DIR  =./include
+SRC_OBJS = ./src_objs
+
+APP_DIR  =./apps
+APP_OBJS =./app_objs
+APP_BIN  =./bin
 
 # Location of the CUDA Toolkit
 CUDA=$(shell echo ${PATH} | sed 's/.*\(cuda-[0-9]\+.[0-9]\).*/\1/')
@@ -159,8 +165,8 @@ HOST_COMPILER ?= g++
 NVCC          := $(CUDA_PATH)/bin/nvcc -ccbin $(HOST_COMPILER)
 
 # internal flags
-NVCCFLAGS   := -m${TARGET_SIZE}
-CCFLAGS     := -O2 -Wall
+NVCCFLAGS   := -m${TARGET_SIZE} -std=c++14
+CCFLAGS     := -O3 -Wall -std=c++14
 LDFLAGS     :=
 
 # build flags
@@ -214,13 +220,23 @@ ALL_LDFLAGS += $(addprefix -Xlinker ,$(EXTRA_LDFLAGS))
 # Common includes and paths for CUDA
 INCLUDES  := -I$(CUDA_PATH)/include
 INCLUDES  += -I$(CUDA_PATH)/samples/common/inc
-INCLUDES  += -I$(SRC_DIR)
+INCLUDES  += -I$(INC_DIR)
 LIBRARIES :=
+
+# CUDA files: src and application
+OBJ_SRCCU :=$(patsubst %.cu, $(SRC_OBJS)/%.o, $(notdir $(wildcard $(addsuffix /*.cu, $(SRC_DIR)))))
+
+OBJ_APPCU :=$(patsubst %.cu, $(APP_OBJS)/%.o, $(notdir $(wildcard $(addsuffix /*.cu, $(APP_DIR)))))
+BIN_APPCU :=$(patsubst %.cu, $(APP_BIN)/%, $(notdir $(wildcard $(addsuffix /*.cu, $(APP_DIR)))))
+BIN_APP   :=$(BIN_APPCU)
+
+OBJECTS :=$(OBJ_SRCCU)
+OBJECTS +=$(OBJ_APPCU)
 
 ################################################################################
 
 # Makefile include to help find GL Libraries
-include $(SRC_DIR)/findgllib.mk
+include findgllib.mk
 
 # OpenGL specific libraries
 ifeq ($(TARGET_OS),darwin)
@@ -233,14 +249,12 @@ else
  LIBRARIES += -lGL -lGLU -lX11 -lglut
 endif
 
-# Eigen Linear Algebra for optimizations
-# INCLUDES  += -I$(EIGEN_ROOT_DIR)
-
 # Gencode arguments
 ifeq ($(TARGET_ARCH),$(filter $(TARGET_ARCH),armv7l aarch64))
 SMS ?= 53
 else
-SMS ?= 30 35 37 50 52 60
+$(info ***** GPU_ARCH=$(GPU_ARCH) *****)
+SMS ?=$(GPU_ARCH)
 endif
 
 ifeq ($(SMS),)
@@ -251,12 +265,6 @@ endif
 ifeq ($(GENCODE_FLAGS),)
 # Generate SASS code for each SM architecture listed in $(SMS)
 $(foreach sm,$(SMS),$(eval GENCODE_FLAGS += -gencode arch=compute_$(sm),code=sm_$(sm)))
-
-# Generate PTX code from the highest SM architecture in $(SMS) to guarantee forward-compatibility
-HIGHEST_SM := $(lastword $(sort $(SMS)))
-ifneq ($(HIGHEST_SM),)
-GENCODE_FLAGS += -gencode arch=compute_$(HIGHEST_SM),code=compute_$(HIGHEST_SM)
-endif
 endif
 
 ifeq ($(BUILD_ENABLED),0)
@@ -268,7 +276,7 @@ endif
 # Target rules
 all: build
 
-build: quadTreeGPU quadTreeFilterGPU quadTreeFilterDevGPU profileFilterGPU profileFilterDevAsyncGPU
+build: $(BIN_APP)
 
 check.incs:
 	@echo $(INCLUDES)
@@ -284,6 +292,12 @@ check.arch:
 	@echo "Host Arch: " $(TARGET_ARCH)
 	@echo "GPU code Arch(s): "$(GENCODE_FLAGS)
 
+check.bin:
+	@echo $(BIN_APP) $(OBJ_APPCU)
+
+check.objects:
+	@echo "OBJECTS: " $(OBJECTS)
+
 check.deps:
 ifeq ($(BUILD_ENABLED),0)
 	@echo "Build waived due to the missing openGL dependencies"
@@ -292,60 +306,28 @@ else
 endif
 
 # Quad Tree CUDA Kernels
-quadTreeKernels.o: $(SRC_DIR)/quadTreeKernels.cu $(SRC_DIR)/quadTreeKernels.h
-	$(EXEC) $(NVCC) $(INCLUDES) $(ALL_CCFLAGS) $(GENCODE_FLAGS) -c $<
+$(SRC_OBJS)/%.o: $(SRC_DIR)/%.cu $(INC_DIR)/%.h | $(SRC_OBJS)
+	$(EXEC) $(NVCC) $(INCLUDES) $(ALL_CCFLAGS) $(GENCODE_FLAGS) -c $< -o $@
 
-# Quad Tree Builder
-QuadTreeBuilder.o: $(SRC_DIR)/QuadTreeBuilder.cu $(SRC_DIR)/QuadTreeBuilder.h
-	$(EXEC) $(NVCC) $(INCLUDES) $(ALL_CCFLAGS) -std=c++11 $(GENCODE_FLAGS) -c $<
+$(SRC_OBJS):
+	mkdir -p $(SRC_OBJS)
 
-# main application object
-mainBuild.o:$(SRC_DIR)/mainBuild.cu
-	$(EXEC) $(NVCC) $(INCLUDES) $(ALL_CCFLAGS) -std=c++11 $(GENCODE_FLAGS) -c $<
+# Application objects
+$(APP_OBJS)/%.o: $(APP_DIR)/%.cu | $(APP_OBJS)
+	$(EXEC) $(NVCC) $(INCLUDES) $(ALL_CCFLAGS)$(GENCODE_FLAGS) -c $< -o $@
 
-# main filter object
-mainFilter.o:$(SRC_DIR)/mainFilter.cu
-	$(EXEC) $(NVCC) $(INCLUDES) $(ALL_CCFLAGS) -std=c++11 $(GENCODE_FLAGS) -c $<
+$(APP_OBJS):
+	mkdir -p $(APP_OBJS)
 
-# main filter dev object
-mainFilterDev.o:$(SRC_DIR)/mainFilterDev.cu
-	$(EXEC) $(NVCC) $(INCLUDES) $(ALL_CCFLAGS) -std=c++11 $(GENCODE_FLAGS) -c $<
-
-# main profile filter object
-mainProfileFilter.o:$(SRC_DIR)/mainProfileFilter.cu
-	$(EXEC) $(NVCC) $(INCLUDES) $(ALL_CCFLAGS) -std=c++11 $(GENCODE_FLAGS) -c $<
-
-# main profile filter dev async object
-mainProfileFilterDevAsync.o:$(SRC_DIR)/mainProfileFilterDevAsync.cu
-	$(EXEC) $(NVCC) $(INCLUDES) $(ALL_CCFLAGS) -std=c++11 $(GENCODE_FLAGS) -c $<
-
-# main build application
-quadTreeGPU: mainBuild.o QuadTreeBuilder.o quadTreeKernels.o
+# Application binaries
+$(APP_BIN)/%: $(APP_OBJS)/%.o $(OBJ_SRCCU) | $(APP_BIN)
 	$(EXEC) $(NVCC) $(ALL_LDFLAGS) $(GENCODE_FLAGS) -o $@ $+ $(LIBRARIES)
-	$(EXEC) mv $@ ./bin
 
-# main Filter application
-quadTreeFilterGPU: mainFilter.o QuadTreeBuilder.o quadTreeKernels.o
-	$(EXEC) $(NVCC) $(ALL_LDFLAGS) $(GENCODE_FLAGS) -o $@ $+ $(LIBRARIES)
-	$(EXEC) mv $@ ./bin
+$(APP_BIN):
+	mkdir -p $(APP_BIN)
 
-# main profile app of Filter application
-profileFilterGPU: mainProfileFilter.o QuadTreeBuilder.o quadTreeKernels.o
-	$(EXEC) $(NVCC) $(ALL_LDFLAGS) $(GENCODE_FLAGS) -o $@ $+ $(LIBRARIES)
-	$(EXEC) mv $@ ./bin
-
-# main profile app of FilterDev Async application
-profileFilterDevAsyncGPU: mainProfileFilterDevAsync.o QuadTreeBuilder.o quadTreeKernels.o
-	$(EXEC) $(NVCC) $(ALL_LDFLAGS) $(GENCODE_FLAGS) -o $@ $+ $(LIBRARIES)
-	$(EXEC) mv $@ ./bin
-
-# main Filter application
-quadTreeFilterDevGPU: mainFilterDev.o QuadTreeBuilder.o quadTreeKernels.o
-	$(EXEC) $(NVCC) $(ALL_LDFLAGS) $(GENCODE_FLAGS) -o $@ $+ $(LIBRARIES)
-	$(EXEC) mv $@ ./bin
-
-.PHONY: clean
 clean:
-	rm -f ./bin/* ./*.o
+	rm -rf bin src_objs app_objs
 
-clobber: clean
+.PHONY: clean all
+.SECONDARY: $(OBJECTS)

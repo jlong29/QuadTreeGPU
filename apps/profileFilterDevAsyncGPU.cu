@@ -17,18 +17,21 @@ using namespace quadTreeGPU;
 //The star of the show
 QuadTreeBuilder quadTree;
 
+/* GLOBAL PARAMETERS */
+unsigned int* d_D;
+
 //Help Information
 static void show_usage(std::string name)
 {
 	std::cerr << "Usage: " << name << " <options(s)>"
 			  << "Options:\n"
-			  << "\t-i,--help\tShow this help message\n"
+			  << "\t-h,--help\tShow this help message\n"
 			  << "\t-n,\t\tset the number of data points to generate\n"
-			  << "\t-m,\t\tset the number of iterations to run\n"
-			  << "\t-d,\t\tset the number of data points to generate then filtered\n"
-			  << "\t-q,\t\tset the number of filtered data points to generate\n"
+			  << "\t-d,\t\tset the number of data points to generate then filter (d < n)\n"
+			  << "\t-q,\t\tset the number of filtered data points to generate (q < d)\n"
 			  << "\t-w,\t\tset the width of the image plane\n"
 			  << "\t-h,\t\tset the height of the image plane\n"
+			  << "\t-m,\t\tset the number of iterations to run\n"
 			  << std::endl;
 }
 
@@ -57,7 +60,7 @@ int main(int argc, char** argv)
 	for (int i = 1; i < argc; ++i)
 	{
 		std::string arg = argv[i];
-		if ((arg == "-i") || (arg == "--help"))
+		if ((arg == "-h") || (arg == "--help"))
 		{
 			show_usage(argv[0]);
 			return 0;  
@@ -137,6 +140,10 @@ int main(int argc, char** argv)
 		return -1;
 	}
 
+	//Transfer D to unsigned int* on device
+	checkCudaErrors(cudaMalloc((void**)&d_D, sizeof(unsigned int)));
+	checkCudaErrors(cudaMemcpy(d_D, &D, sizeof(unsigned int), cudaMemcpyHostToDevice));
+
 	//Set QuadTreeBuilder parameters
 	quadTree.setParameters(N, W, H, Q, D);
 
@@ -200,7 +207,8 @@ int runFilter()
 	}
 
 	// FILTER WITH QUAD TREE
-	quadTree.filter();
+	quadTree.filter_async(d_D);
+	quadTree.join();
 
 	return 0;
 }
